@@ -15,7 +15,7 @@ create table if not exists households (
       "chicken":  "free-range",
       "milk":     "organic"
     },
-    "primary_stores": ["Sam'\''s Club", "Trader Joe'\''s", "Wegmans"]
+    "primary_stores": ["Whole Foods", "Sam''s Club", "Trader Joe''s"]
   }'::jsonb,
   created_at       timestamptz not null default now()
 );

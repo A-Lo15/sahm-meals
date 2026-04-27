@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
@@ -31,15 +32,17 @@ export default async function Home() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-            <div className="text-2xl mb-2">📚</div>
-            <h3 className="font-semibold text-gray-800">Library</h3>
-            <p className="text-xs text-gray-400 mt-0.5">0 recipes</p>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <Link href="/recipes" className="block">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:bg-gray-50">
+              <div className="text-2xl mb-2">📚</div>
+              <h3 className="font-semibold text-gray-800">Library</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Recipes</p>
+            </div>
+          </Link>
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 opacity-50">
             <div className="text-2xl mb-2">🛒</div>
             <h3 className="font-semibold text-gray-800">Shopping</h3>
-            <p className="text-xs text-gray-400 mt-0.5">No list yet</p>
+            <p className="text-xs text-gray-400 mt-0.5">Coming soon</p>
           </div>
         </div>
 
