@@ -44,7 +44,10 @@ export default function StateControls({ recipeId, initialState, hasOriginal }: P
   function handleReset() {
     if (!confirm('Reset to the originally imported version? Your edits will be lost.')) return
     setShowMenu(false)
-    startTransition(() => resetRecipeToOriginal(recipeId))
+    startTransition(async () => {
+      await resetRecipeToOriginal(recipeId)
+      router.refresh()
+    })
   }
 
   const inLibrary = state === 'saved' || state === 'favorited'
