@@ -1,10 +1,13 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Ingredient, RecipeState } from '@/lib/types'
 
+// Auth is enforced via getUser(); admin client is used for DB ops because
+// the user JWT is not forwarded to PostgREST in server action context.
 async function getContext() {
   const supabase = await createClient()
   const {
@@ -12,25 +15,43 @@ async function getContext() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data } = await supabase
+  const db = createAdminClient()
+
+  const { data: userData } = await db
     .from('users')
     .select('household_id')
     .eq('id', user.id)
     .single()
 
-  if (!data?.household_id) throw new Error('No household found')
-  return { supabase, householdId: data.household_id as string }
+  let householdId = userData?.household_id as string | undefined
+
+  if (!householdId) {
+    const { data: household } = await db
+      .from('households')
+      .insert({ name: 'My Household' })
+      .select('id')
+      .single()
+
+    if (household) {
+      await db
+        .from('users')
+        .upsert({ id: user.id, email: user.email!, household_id: household.id })
+      householdId = household.id
+    }
+  }
+
+  if (!householdId) throw new Error('Failed to find or create household')
+  return { db, householdId }
 }
 
 export async function createRecipe(formData: FormData): Promise<{ id: string }> {
-  const { supabase, householdId } = await getContext()
+  const { db, householdId } = await getContext()
 
   const ingredientsRaw = formData.get('ingredients') as string
   const ingredients: Ingredient[] = ingredientsRaw ? JSON.parse(ingredientsRaw) : []
-
   const servings = Math.max(1, parseInt(formData.get('default_servings') as string) || 4)
 
-  const { data: recipe, error } = await supabase
+  const { data: recipe, error } = await db
     .from('recipes')
     .insert({
       household_id: householdId,
@@ -55,26 +76,22 @@ export async function updateRecipeState(
   recipeId: string,
   newState: RecipeState
 ): Promise<void> {
-  const { supabase } = await getContext()
-
-  await supabase.from('recipes').update({ state: newState }).eq('id', recipeId)
-
+  const { db } = await getContext()
+  await db.from('recipes').update({ state: newState }).eq('id', recipeId)
   revalidatePath('/recipes')
   revalidatePath(`/recipes/${recipeId}`)
 }
 
 export async function deleteRecipe(recipeId: string): Promise<void> {
-  const { supabase } = await getContext()
-
-  await supabase.from('recipes').delete().eq('id', recipeId)
-
+  const { db } = await getContext()
+  await db.from('recipes').delete().eq('id', recipeId)
   revalidatePath('/recipes')
 }
 
 export async function resetRecipeToOriginal(recipeId: string): Promise<void> {
-  const { supabase } = await getContext()
+  const { db } = await getContext()
 
-  const { data: recipe } = await supabase
+  const { data: recipe } = await db
     .from('recipes')
     .select('original_parsed_json')
     .eq('id', recipeId)
@@ -84,7 +101,7 @@ export async function resetRecipeToOriginal(recipeId: string): Promise<void> {
 
   const orig = recipe.original_parsed_json as Record<string, unknown>
 
-  await supabase
+  await db
     .from('recipes')
     .update({
       title: orig.title ?? null,

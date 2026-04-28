@@ -199,3 +199,8 @@ create policy "shopping_lists: household" on shopping_lists
 -- prices: scoped to household
 create policy "prices: household" on prices
   for all using (household_id = my_household_id());
+
+-- ─── Service role table grants ────────────────────────────────────────────────
+-- service_role bypasses RLS but still needs explicit table grants
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;

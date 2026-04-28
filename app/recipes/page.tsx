@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Recipe } from '@/lib/types'
@@ -29,7 +30,9 @@ export default async function RecipesPage({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: userData } = await supabase
+  const db = createAdminClient()
+
+  const { data: userData } = await db
     .from('users')
     .select('household_id')
     .eq('id', user.id)
@@ -42,7 +45,7 @@ export default async function RecipesPage({
 
   if (householdId) {
     if (tab === 'this-week') {
-      const { data: plan } = await supabase
+      const { data: plan } = await db
         .from('meal_plans')
         .select('id')
         .eq('household_id', householdId)
@@ -50,26 +53,26 @@ export default async function RecipesPage({
         .maybeSingle()
 
       if (plan) {
-        const { data: slots } = await supabase
+        const { data: slots } = await db
           .from('meal_plan_recipes')
           .select('recipe_id')
           .eq('meal_plan_id', plan.id)
 
         const ids = (slots ?? []).map((s: { recipe_id: string }) => s.recipe_id)
         if (ids.length > 0) {
-          const { data } = await supabase.from('recipes').select('*').in('id', ids)
+          const { data } = await db.from('recipes').select('*').in('id', ids)
           recipes = (data as Recipe[]) ?? []
         }
       }
     } else if (tab === 'history') {
-      const { data } = await supabase
+      const { data } = await db
         .from('recipes')
         .select('*')
         .eq('household_id', householdId)
         .order('updated_at', { ascending: false })
       recipes = (data as Recipe[]) ?? []
     } else {
-      const { data } = await supabase
+      const { data } = await db
         .from('recipes')
         .select('*')
         .eq('household_id', householdId)

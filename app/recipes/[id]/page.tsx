@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import StateControls from './StateControls'
@@ -16,7 +17,8 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data } = await supabase
+  const db = createAdminClient()
+  const { data } = await db
     .from('recipes')
     .select('*')
     .eq('id', params.id)
