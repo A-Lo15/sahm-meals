@@ -51,6 +51,9 @@ export async function createRecipe(formData: FormData): Promise<{ id: string }> 
   const ingredients: Ingredient[] = ingredientsRaw ? JSON.parse(ingredientsRaw) : []
   const servings = Math.max(1, parseInt(formData.get('default_servings') as string) || 4)
 
+  const isImport = formData.get('is_import') === 'true'
+  const originalJsonRaw = formData.get('original_parsed_json') as string | null
+
   const { data: recipe, error } = await db
     .from('recipes')
     .insert({
@@ -59,9 +62,11 @@ export async function createRecipe(formData: FormData): Promise<{ id: string }> 
       description: (formData.get('description') as string)?.trim() || null,
       default_servings: servings,
       source_url: (formData.get('source_url') as string)?.trim() || null,
+      source_image_url: (formData.get('source_image_url') as string)?.trim() || null,
       ingredients,
       instructions: (formData.get('instructions') as string)?.trim() || null,
-      state: 'saved' as RecipeState,
+      original_parsed_json: originalJsonRaw ? JSON.parse(originalJsonRaw) : null,
+      state: (isImport ? 'tried' : 'saved') as RecipeState,
     })
     .select('id')
     .single()
