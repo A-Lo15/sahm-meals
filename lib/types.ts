@@ -18,6 +18,37 @@ export interface Ingredient {
   notes: string
 }
 
+export interface MealPlan {
+  id: string
+  household_id: string
+  week_start_date: string
+  created_at: string
+}
+
+export interface SlotWithRecipe {
+  id: string
+  meal_plan_id: string
+  recipe_id: string
+  day_of_week: number
+  servings_override: number | null
+  position: number
+  recipe: {
+    id: string
+    title: string
+    default_servings: number
+    source_image_url: string | null
+    state: RecipeState
+  }
+}
+
+export interface RecipeOption {
+  id: string
+  title: string
+  default_servings: number
+  source_image_url: string | null
+  state: RecipeState
+}
+
 export interface Recipe {
   id: string
   household_id: string

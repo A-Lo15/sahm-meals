@@ -1,0 +1,256 @@
+'use client'
+
+import { useState, useTransition, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { generateShoppingList, saveCheckedState } from './actions'
+import { STORES, type StoreAssignments, type StoreName, type ShoppingItem } from '@/lib/shopping'
+
+const CATEGORY_LABELS: Record<string, string> = {
+  produce: 'Produce',
+  meat: 'Meat & Seafood',
+  dairy: 'Dairy & Eggs',
+  pantry: 'Pantry',
+  frozen: 'Frozen',
+  household: 'Household',
+  other: 'Other',
+  '': 'Other',
+}
+
+interface Props {
+  weekStart: string
+  initialListId: string | null
+  initialAssignments: StoreAssignments | null
+  initialGeneratedAt: string | null
+  hasMeals: boolean
+}
+
+export default function ShoppingClient({
+  weekStart,
+  initialListId,
+  initialAssignments,
+  initialGeneratedAt,
+  hasMeals,
+}: Props) {
+  const router = useRouter()
+  const [listId, setListId] = useState(initialListId)
+  const [assignments, setAssignments] = useState<StoreAssignments | null>(initialAssignments)
+  const [generatedAt, setGeneratedAt] = useState(initialGeneratedAt)
+  const [activeStore, setActiveStore] = useState<StoreName>('Whole Foods')
+  const [isPending, startTransition] = useTransition()
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function formatWeekLabel() {
+    const start = new Date(weekStart)
+    const end = new Date(weekStart)
+    end.setDate(end.getDate() + 6)
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`
+  }
+
+  function handleGenerate() {
+    startTransition(async () => {
+      const result = await generateShoppingList(weekStart)
+      if (result) {
+        setListId(result.id)
+        setAssignments(result.storeAssignments)
+        setGeneratedAt(result.generatedAt)
+      }
+    })
+  }
+
+  const scheduleSave = useCallback(
+    (id: string, updated: StoreAssignments) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        startTransition(() => saveCheckedState(id, updated))
+      }, 600)
+    },
+    []
+  )
+
+  function toggleItem(store: StoreName, index: number) {
+    if (!assignments || !listId) return
+    const updated: StoreAssignments = {
+      ...assignments,
+      [store]: assignments[store].map((item, i) =>
+        i === index ? { ...item, checked: !item.checked } : item
+      ),
+    }
+    setAssignments(updated)
+    scheduleSave(listId, updated)
+  }
+
+  // Group items by category for display
+  function groupByCategory(items: ShoppingItem[]) {
+    const groups = new Map<string, ShoppingItem[]>()
+    for (const item of items) {
+      const cat = item.category || 'other'
+      if (!groups.has(cat)) groups.set(cat, [])
+      groups.get(cat)!.push(item)
+    }
+    return groups
+  }
+
+  const uncheckedCount = (store: StoreName) =>
+    assignments?.[store].filter((i) => !i.checked).length ?? 0
+
+  const totalCount = (store: StoreName) => assignments?.[store].length ?? 0
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-12">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10">
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => { router.refresh(); router.push(`/planner?week=${weekStart}`) }}
+              className="text-sm text-gray-500 py-1 pr-3"
+            >
+              ← Week
+            </button>
+            <div className="text-center">
+              <h1 className="font-bold text-gray-900 text-base">Shopping List</h1>
+              <p className="text-xs text-gray-400">{formatWeekLabel()}</p>
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={isPending || !hasMeals}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-xl disabled:opacity-40 active:bg-green-700"
+            >
+              {isPending ? 'Building…' : assignments ? 'Regenerate' : 'Build List'}
+            </button>
+          </div>
+          {generatedAt && (
+            <p className="text-xs text-gray-400 mt-1">
+              Generated {new Date(generatedAt).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+              })}
+            </p>
+          )}
+        </div>
+      </header>
+
+      {/* No meals state */}
+      {!hasMeals && (
+        <div className="max-w-lg mx-auto px-4 py-16 text-center">
+          <p className="text-4xl mb-4">🗓</p>
+          <p className="text-gray-600 font-medium">No meals planned this week</p>
+          <p className="text-sm text-gray-400 mt-1">Add meals in the planner first</p>
+          <button
+            onClick={() => router.push('/planner')}
+            className="mt-4 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl"
+          >
+            Go to Planner
+          </button>
+        </div>
+      )}
+
+      {/* No list yet */}
+      {hasMeals && !assignments && (
+        <div className="max-w-lg mx-auto px-4 py-16 text-center">
+          <p className="text-4xl mb-4">🛒</p>
+          <p className="text-gray-600 font-medium">Ready to build your list</p>
+          <p className="text-sm text-gray-400 mt-1">
+            Tap "Build List" to aggregate ingredients from this week's meals
+          </p>
+          <button
+            onClick={() => { router.refresh(); router.push(`/planner?week=${weekStart}`) }}
+            className="inline-block mt-4 text-sm text-green-600 font-medium"
+          >
+            ← Back to week view
+          </button>
+        </div>
+      )}
+
+      {/* List */}
+      {assignments && (
+        <>
+          {/* Store tabs */}
+          <div className="sticky top-[73px] z-10 bg-white border-b border-gray-200">
+            <div className="max-w-lg mx-auto flex">
+              {STORES.map((store) => {
+                const remaining = uncheckedCount(store)
+                const total = totalCount(store)
+                return (
+                  <button
+                    key={store}
+                    onClick={() => setActiveStore(store)}
+                    className={`flex-1 py-3 text-xs font-medium transition-colors border-b-2 ${
+                      activeStore === store
+                        ? 'border-green-600 text-green-700'
+                        : 'border-transparent text-gray-500'
+                    }`}
+                  >
+                    <span className="block truncate px-1">{store}</span>
+                    {total > 0 && (
+                      <span className={`text-xs ${remaining === 0 ? 'text-green-500' : 'text-gray-400'}`}>
+                        {remaining === 0 ? '✓ done' : `${remaining}/${total}`}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Items */}
+          <div className="max-w-lg mx-auto px-4 py-4">
+            {assignments[activeStore].length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
+            ) : (
+              (() => {
+                const groups = groupByCategory(assignments[activeStore])
+                return (
+                  <div className="space-y-4">
+                    {Array.from(groups.entries()).map(([cat, items]) => (
+                      <div key={cat}>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                          {CATEGORY_LABELS[cat] ?? cat}
+                        </p>
+                        <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                          {items.map((item, idx) => {
+                            const globalIdx = assignments[activeStore].indexOf(item)
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => toggleItem(activeStore, globalIdx)}
+                                className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
+                              >
+                                <span
+                                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
+                                    item.checked
+                                      ? 'bg-green-500 border-green-500 text-white'
+                                      : 'border-gray-300'
+                                  }`}
+                                >
+                                  {item.checked ? '✓' : ''}
+                                </span>
+                                <span
+                                  className={`flex-1 text-sm ${
+                                    item.checked ? 'line-through text-gray-400' : 'text-gray-800'
+                                  }`}
+                                >
+                                  {item.name}
+                                </span>
+                                {(item.quantity || item.unit) && (
+                                  <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
+                                    {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

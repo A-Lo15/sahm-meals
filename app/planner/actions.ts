@@ -1,0 +1,100 @@
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+
+async function getContext() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const db = createAdminClient()
+
+  const { data: userData } = await db
+    .from('users')
+    .select('household_id')
+    .eq('id', user.id)
+    .single()
+
+  const householdId = userData?.household_id as string | undefined
+  if (!householdId) throw new Error('No household found')
+  return { db, householdId }
+}
+
+export async function ensureMealPlan(weekStartDate: string): Promise<{ id: string }> {
+  const { db, householdId } = await getContext()
+
+  const { data: existing } = await db
+    .from('meal_plans')
+    .select('id')
+    .eq('household_id', householdId)
+    .eq('week_start_date', weekStartDate)
+    .single()
+
+  if (existing) return { id: existing.id }
+
+  const { data: created, error } = await db
+    .from('meal_plans')
+    .insert({ household_id: householdId, week_start_date: weekStartDate })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  return { id: created.id }
+}
+
+export async function addRecipeToDay(
+  mealPlanId: string,
+  recipeId: string,
+  dayOfWeek: number
+): Promise<{ id: string }> {
+  const { db } = await getContext()
+
+  const { data: existing } = await db
+    .from('meal_plan_recipes')
+    .select('position')
+    .eq('meal_plan_id', mealPlanId)
+    .eq('day_of_week', dayOfWeek)
+    .order('position', { ascending: false })
+    .limit(1)
+    .single()
+
+  const nextPosition = existing ? existing.position + 1 : 0
+
+  const { data, error } = await db
+    .from('meal_plan_recipes')
+    .insert({
+      meal_plan_id: mealPlanId,
+      recipe_id: recipeId,
+      day_of_week: dayOfWeek,
+      position: nextPosition,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  revalidatePath('/planner')
+  return { id: data.id }
+}
+
+export async function removeSlot(slotId: string): Promise<void> {
+  const { db } = await getContext()
+  await db.from('meal_plan_recipes').delete().eq('id', slotId)
+  revalidatePath('/planner')
+}
+
+export async function updateSlotServings(
+  slotId: string,
+  servings: number
+): Promise<void> {
+  const { db } = await getContext()
+  await db
+    .from('meal_plan_recipes')
+    .update({ servings_override: servings })
+    .eq('id', slotId)
+}
+

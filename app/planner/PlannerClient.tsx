@@ -1,0 +1,366 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  addRecipeToDay,
+  removeSlot,
+  updateSlotServings,
+} from './actions'
+import type { SlotWithRecipe, RecipeOption } from '@/lib/types'
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+interface Props {
+  mealPlanId: string
+  weekStart: string
+  initialSlots: SlotWithRecipe[]
+  recipes: RecipeOption[]
+}
+
+interface OptimisticSlot extends SlotWithRecipe {
+  optimistic?: boolean
+}
+
+export default function PlannerClient({
+  mealPlanId,
+  weekStart,
+  initialSlots,
+  recipes,
+}: Props) {
+  const router = useRouter()
+  const [slots, setSlots] = useState<OptimisticSlot[]>(initialSlots)
+  const [isPending, startTransition] = useTransition()
+  const [pickerDay, setPickerDay] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
+
+  // ── Week navigation ──────────────────────────────────────────────────────────
+
+  function navWeek(delta: number) {
+    const d = new Date(weekStart)
+    d.setDate(d.getDate() + delta * 7)
+    router.push(`/planner?week=${d.toISOString().split('T')[0]}`)
+  }
+
+  function formatWeekLabel() {
+    const start = new Date(weekStart)
+    const end = new Date(weekStart)
+    end.setDate(end.getDate() + 6)
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`
+  }
+
+  // ── Slot mutations ───────────────────────────────────────────────────────────
+
+  function handleAdd(recipe: RecipeOption) {
+    if (pickerDay === null) return
+    const tempId = `temp-${Date.now()}`
+    const optimisticSlot: OptimisticSlot = {
+      id: tempId,
+      meal_plan_id: mealPlanId,
+      recipe_id: recipe.id,
+      day_of_week: pickerDay,
+      servings_override: null,
+      position: slots.filter((s) => s.day_of_week === pickerDay).length,
+      recipe: {
+        id: recipe.id,
+        title: recipe.title,
+        default_servings: recipe.default_servings,
+        source_image_url: recipe.source_image_url,
+        state: recipe.state,
+      },
+      optimistic: true,
+    }
+    setSlots((prev) => [...prev, optimisticSlot])
+    setPickerDay(null)
+    setSearch('')
+
+    startTransition(async () => {
+      try {
+        const { id } = await addRecipeToDay(mealPlanId, recipe.id, pickerDay!)
+        setSlots((prev) =>
+          prev.map((s) => (s.id === tempId ? { ...s, id, optimistic: false } : s))
+        )
+      } catch {
+        setSlots((prev) => prev.filter((s) => s.id !== tempId))
+      }
+    })
+  }
+
+  function handleRemove(slotId: string) {
+    setSlots((prev) => prev.filter((s) => s.id !== slotId))
+    startTransition(() => removeSlot(slotId))
+  }
+
+  function handleServingsChange(slotId: string, value: number) {
+    setSlots((prev) =>
+      prev.map((s) => (s.id === slotId ? { ...s, servings_override: value } : s))
+    )
+    // Call directly — not inside startTransition, which React can cancel on navigation
+    void updateSlotServings(slotId, value)
+  }
+
+  // ── Picker filtering ─────────────────────────────────────────────────────────
+
+  const filteredRecipes = recipes.filter((r) => {
+    const matchesTab =
+      pickerTab === 'all' || r.state === 'saved' || r.state === 'favorited'
+    const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase())
+    return matchesTab && matchesSearch
+  })
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10">
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-1">
+            <Link href="/" className="text-sm text-gray-500 py-1 pr-3">
+              Home
+            </Link>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => navWeek(-1)}
+                className="w-9 h-9 flex items-center justify-center text-gray-500 text-xl"
+              >
+                ‹
+              </button>
+              <h1 className="font-bold text-gray-900 text-base">{formatWeekLabel()}</h1>
+              <button
+                onClick={() => navWeek(1)}
+                className="w-9 h-9 flex items-center justify-center text-gray-500 text-xl"
+              >
+                ›
+              </button>
+            </div>
+            <div className="w-12" />
+          </div>
+          <div className="text-center">
+            <Link
+              href={`/shopping?week=${weekStart}`}
+              className="text-xs text-green-600 font-medium"
+            >
+              View shopping list →
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Day cards */}
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
+        {DAYS.map((dayName, i) => {
+          const dayDate = new Date(weekStart)
+          dayDate.setDate(dayDate.getDate() + i)
+          dayDate.setHours(0, 0, 0, 0)
+          const isToday = dayDate.getTime() === today.getTime()
+          const daySlots = slots.filter((s) => s.day_of_week === i)
+
+          return (
+            <div
+              key={i}
+              className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
+            >
+              {/* Day header */}
+              <div
+                className={`flex items-center justify-between px-4 py-2.5 ${
+                  isToday ? 'bg-green-50' : ''
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-sm font-semibold ${
+                      isToday ? 'text-green-700' : 'text-gray-700'
+                    }`}
+                  >
+                    {dayName}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setPickerDay(i)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-lg leading-none"
+                  aria-label={`Add recipe to ${dayName}`}
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Slots */}
+              {daySlots.length > 0 && (
+                <div className="divide-y divide-gray-100">
+                  {daySlots.map((slot) => {
+                    const servings = slot.servings_override ?? slot.recipe.default_servings
+                    return (
+                      <div
+                        key={slot.id}
+                        className={`flex items-center gap-3 px-4 py-3 ${
+                          slot.optimistic ? 'opacity-60' : ''
+                        }`}
+                      >
+                        {slot.recipe.source_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={slot.recipe.source_image_url}
+                            alt=""
+                            className="w-11 h-11 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-lg">
+                            🍽
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {slot.recipe.title}
+                          </p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <button
+                              onClick={() =>
+                                handleServingsChange(slot.id, Math.max(1, servings - 1))
+                              }
+                              className="w-5 h-5 flex items-center justify-center text-gray-400 text-base leading-none"
+                            >
+                              −
+                            </button>
+                            <span className="text-xs text-gray-500 w-16 text-center">
+                              {servings} serving{servings !== 1 ? 's' : ''}
+                            </span>
+                            <button
+                              onClick={() => handleServingsChange(slot.id, servings + 1)}
+                              className="w-5 h-5 flex items-center justify-center text-gray-400 text-base leading-none"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleRemove(slot.id)}
+                          className="w-8 h-8 flex items-center justify-center text-gray-300 text-base flex-shrink-0"
+                          aria-label="Remove"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {daySlots.length === 0 && (
+                <div className="px-4 pb-3">
+                  <p className="text-xs text-gray-400">No meals planned</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Recipe picker bottom sheet */}
+      {pickerDay !== null && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40"
+            onClick={() => { setPickerDay(null); setSearch('') }}
+          />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[75vh] flex flex-col">
+            {/* Sheet handle + title */}
+            <div className="flex flex-col items-center pt-3 pb-2 px-4">
+              <div className="w-10 h-1 bg-gray-300 rounded-full mb-3" />
+              <div className="flex items-center justify-between w-full">
+                <h2 className="font-semibold text-gray-900 text-base">
+                  Add to {DAYS[pickerDay]}
+                </h2>
+                <button
+                  onClick={() => { setPickerDay(null); setSearch('') }}
+                  className="text-gray-400 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="px-4 pb-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search recipes…"
+                autoFocus
+                className="w-full px-4 py-2.5 bg-gray-100 rounded-xl text-base focus:outline-none"
+              />
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-0 px-4 pb-2">
+              {(['library', 'all'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setPickerTab(tab)}
+                  className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    pickerTab === tab
+                      ? 'bg-green-100 text-green-700'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {tab === 'library' ? 'Library' : 'All Recipes'}
+                </button>
+              ))}
+            </div>
+
+            {/* Recipe list */}
+            <div className="overflow-y-auto flex-1 px-4 pb-6">
+              {filteredRecipes.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-8">No recipes found</p>
+              ) : (
+                <div className="space-y-1">
+                  {filteredRecipes.map((recipe) => (
+                    <button
+                      key={recipe.id}
+                      onClick={() => handleAdd(recipe)}
+                      className="w-full flex items-center gap-3 py-3 px-3 rounded-xl active:bg-gray-50 text-left"
+                    >
+                      {recipe.source_image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={recipe.source_image_url}
+                          alt=""
+                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          🍽
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {recipe.title}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {recipe.default_servings} servings
+                          {recipe.state === 'favorited' ? ' · ★' : ''}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
