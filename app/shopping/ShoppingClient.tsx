@@ -2,7 +2,6 @@
 
 import { useState, useTransition, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { generateShoppingList, saveCheckedState } from './actions'
 import { STORES, type StoreAssignments, type StoreName, type ShoppingItem } from '@/lib/shopping'
 
@@ -152,7 +151,7 @@ export default function ShoppingClient({
           <p className="text-4xl mb-4">🛒</p>
           <p className="text-gray-600 font-medium">Ready to build your list</p>
           <p className="text-sm text-gray-400 mt-1">
-            Tap "Build List" to aggregate ingredients from this week's meals
+            Tap &ldquo;Build List&rdquo; to aggregate ingredients from this week&apos;s meals
           </p>
           <button
             onClick={() => { router.refresh(); router.push(`/planner?week=${weekStart}`) }}

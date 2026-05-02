@@ -45,7 +45,7 @@ export default async function Home() {
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:bg-gray-50">
               <div className="text-2xl mb-2">🛒</div>
               <h3 className="font-semibold text-gray-800">Shopping</h3>
-              <p className="text-xs text-gray-400 mt-0.5">This week's list</p>
+              <p className="text-xs text-gray-400 mt-0.5">This week&apos;s list</p>
             </div>
           </Link>
         </div>

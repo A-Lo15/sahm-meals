@@ -31,7 +31,7 @@ export default function PlannerClient({
 }: Props) {
   const router = useRouter()
   const [slots, setSlots] = useState<OptimisticSlot[]>(initialSlots)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const [pickerDay, setPickerDay] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
