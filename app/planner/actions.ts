@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import type { ParsedRecipe } from '@/lib/parseRecipe'
 
 async function getContext() {
   const supabase = await createClient()
@@ -98,3 +99,56 @@ export async function updateSlotServings(
     .eq('id', slotId)
 }
 
+export async function importAndAddToDay(
+  parsedRecipe: ParsedRecipe,
+  mealPlanId: string,
+  dayOfWeek: number
+): Promise<{ recipeId: string; slotId: string }> {
+  const { db, householdId } = await getContext()
+
+  const { data: recipe, error: recipeError } = await db
+    .from('recipes')
+    .insert({
+      household_id: householdId,
+      title: parsedRecipe.title,
+      description: parsedRecipe.description ?? null,
+      default_servings: parsedRecipe.default_servings,
+      source_url: parsedRecipe.source_url || null,
+      source_image_url: parsedRecipe.source_image_url ?? null,
+      ingredients: parsedRecipe.ingredients,
+      instructions: parsedRecipe.instructions ?? null,
+      original_parsed_json: parsedRecipe,
+      state: 'tried',
+    })
+    .select('id')
+    .single()
+
+  if (recipeError) throw recipeError
+
+  const { data: existing } = await db
+    .from('meal_plan_recipes')
+    .select('position')
+    .eq('meal_plan_id', mealPlanId)
+    .eq('day_of_week', dayOfWeek)
+    .order('position', { ascending: false })
+    .limit(1)
+    .single()
+
+  const nextPosition = existing ? existing.position + 1 : 0
+
+  const { data: slot, error: slotError } = await db
+    .from('meal_plan_recipes')
+    .insert({
+      meal_plan_id: mealPlanId,
+      recipe_id: recipe.id,
+      day_of_week: dayOfWeek,
+      position: nextPosition,
+    })
+    .select('id')
+    .single()
+
+  if (slotError) throw slotError
+
+  revalidatePath('/planner')
+  return { recipeId: recipe.id, slotId: slot.id }
+}
