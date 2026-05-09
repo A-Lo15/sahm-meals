@@ -156,7 +156,8 @@ export async function importAndAddToDay(
     .single()
 
   if (slotError) {
-    await db.from('recipes').delete().eq('id', recipe.id)
+    const { error: deleteError } = await db.from('recipes').delete().eq('id', recipe.id)
+    if (deleteError) console.error('Failed to clean up orphaned recipe', recipe.id, deleteError)
     throw slotError
   }
 
