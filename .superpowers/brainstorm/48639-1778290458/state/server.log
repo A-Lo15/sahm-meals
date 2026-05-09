@@ -2,3 +2,4 @@
 {"type":"screen-added","file":"/Users/austin.louthan/Projects/meal-planner/.superpowers/brainstorm/48639-1778290458/content/import-entry-point.html"}
 {"source":"user-event","type":"click","text":"Add to Tuesday\n        https://cooking.nytimes.com/…\n        Looks like a URL — tap Import to fetch this recipe\n        \n          Library\n          All Recipes\n        \n        Import Recipe\n      \n    \n    \n      C — Smart search: auto-detect URL\n      When a URL is pasted into the search box, the picker detects it and shows an \"Import\" button instead of search results.","choice":"c","id":null,"timestamp":1778290592917}
 {"type":"screen-added","file":"/Users/austin.louthan/Projects/meal-planner/.superpowers/brainstorm/48639-1778290458/content/waiting-1.html"}
+{"type":"server-stopped","reason":"idle timeout"}

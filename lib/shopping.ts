@@ -39,6 +39,106 @@ function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString()
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const UNIT_ALIASES: Record<string, string> = {
+  // Teaspoon
+  tsp: 'teaspoon', teaspoons: 'teaspoon',
+  // Tablespoon
+  tbsp: 'tablespoon', tbs: 'tablespoon', tb: 'tablespoon', tablespoons: 'tablespoon',
+  // Fluid ounce
+  'fl oz': 'fluid ounce', 'fl. oz.': 'fluid ounce', 'fluid ounces': 'fluid ounce',
+  // Cup
+  c: 'cup', cups: 'cup',
+  // Pint
+  pt: 'pint', pts: 'pint', pints: 'pint',
+  // Quart
+  qt: 'quart', qts: 'quart', quarts: 'quart',
+  // Gallon
+  gal: 'gallon', gallons: 'gallon',
+  // Milliliter
+  ml: 'milliliter', millilitre: 'milliliter', milliliters: 'milliliter', millilitres: 'milliliter',
+  // Liter
+  'l.': 'liter', litre: 'liter', liters: 'liter', litres: 'liter',
+  // Gram
+  'g.': 'gram', grams: 'gram',
+  // Kilogram
+  'kg.': 'kilogram', kilograms: 'kilogram',
+  // Ounce (weight)
+  'oz.': 'ounce', ounces: 'ounce',
+  // Pound
+  lb: 'pound', lbs: 'pound', 'lbs.': 'pound', pounds: 'pound',
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function normalizeUnit(unit: string): string {
+  const u = unit.toLowerCase().trim()
+  return UNIT_ALIASES[u] ?? u
+}
+
+const VOLUME_UNITS = new Set([
+  'teaspoon', 'tablespoon', 'fluid ounce', 'cup', 'pint', 'quart', 'gallon',
+  'milliliter', 'liter',
+])
+
+const WEIGHT_UNITS = new Set([
+  'gram', 'kilogram', 'ounce', 'pound',
+])
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function unitFamily(unit: string): 'volume' | 'weight' | 'other' {
+  if (VOLUME_UNITS.has(unit)) return 'volume'
+  if (WEIGHT_UNITS.has(unit)) return 'weight'
+  return 'other'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const TO_TABLESPOONS: Record<string, number> = {
+  teaspoon: 1 / 3,
+  tablespoon: 1,
+  'fluid ounce': 2,
+  cup: 16,
+  pint: 32,
+  quart: 64,
+  gallon: 256,
+  milliliter: 1 / 14.787,
+  liter: 1000 / 14.787,
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const TO_GRAMS: Record<string, number> = {
+  gram: 1,
+  kilogram: 1000,
+  ounce: 28.3495,
+  pound: 453.592,
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function volumeFromCanonical(tbsp: number): { qty: number; unit: string } {
+  if (tbsp >= 16) return { qty: tbsp / 16, unit: 'cup' }
+  if (tbsp >= 1) return { qty: tbsp, unit: 'tablespoon' }
+  return { qty: tbsp * 3, unit: 'teaspoon' }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function weightFromCanonical(grams: number): { qty: number; unit: string } {
+  if (grams >= 453.592) return { qty: grams / 453.592, unit: 'pound' }
+  if (grams >= 28.3495) return { qty: grams / 28.3495, unit: 'ounce' }
+  return { qty: grams, unit: 'gram' }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function normalizeName(raw: string): string {
+  const s = raw.toLowerCase().trim()
+  if (s.endsWith('ies') && s.length > 4) return s.slice(0, -3) + 'y'
+  if (s.endsWith('oes') && s.length > 4) return s.slice(0, -2)
+  if (s.endsWith('es') && s.length > 4) {
+    const stem = s.slice(0, -2)
+    if (/(?:ch|sh|x|z)$/.test(stem)) return stem
+  }
+  if (s.endsWith('s') && s.length > 3 && !s.endsWith('ss')) return s.slice(0, -1)
+  return s
+}
+
 export const STORE_FOR_CATEGORY: Record<string, string> = {
   produce: 'Whole Foods',
   meat: 'Whole Foods',
