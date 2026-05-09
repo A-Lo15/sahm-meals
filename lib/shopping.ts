@@ -119,8 +119,11 @@ function weightFromCanonical(grams: number): { qty: number; unit: string } {
   return { qty: grams, unit: 'gram' }
 }
 
+const STEM_EXCEPTIONS = new Set(['molasses', 'series'])
+
 function normalizeName(raw: string): string {
   const s = raw.toLowerCase().trim()
+  if (STEM_EXCEPTIONS.has(s)) return s
   if (s.endsWith('ies') && s.length > 4) return s.slice(0, -3) + 'y'
   if (s.endsWith('oes') && s.length > 4) return s.slice(0, -2)
   if (s.endsWith('es') && s.length > 4) {
@@ -203,9 +206,9 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
 
       let canonical: number
       if (family === 'volume') {
-        canonical = rawQty * (TO_TABLESPOONS[normalizedUnit] ?? 1)
+        canonical = rawQty * TO_TABLESPOONS[normalizedUnit]!
       } else if (family === 'weight') {
-        canonical = rawQty * (TO_GRAMS[normalizedUnit] ?? 1)
+        canonical = rawQty * TO_GRAMS[normalizedUnit]!
       } else {
         canonical = rawQty
       }
