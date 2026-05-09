@@ -106,6 +106,14 @@ export async function importAndAddToDay(
 ): Promise<{ recipeId: string; slotId: string }> {
   const { db, householdId } = await getContext()
 
+  const { data: plan } = await db
+    .from('meal_plans')
+    .select('id')
+    .eq('id', mealPlanId)
+    .eq('household_id', householdId)
+    .single()
+  if (!plan) throw new Error('Meal plan not found or access denied')
+
   const { data: recipe, error: recipeError } = await db
     .from('recipes')
     .insert({
@@ -147,7 +155,10 @@ export async function importAndAddToDay(
     .select('id')
     .single()
 
-  if (slotError) throw slotError
+  if (slotError) {
+    await db.from('recipes').delete().eq('id', recipe.id)
+    throw slotError
+  }
 
   revalidatePath('/planner')
   return { recipeId: recipe.id, slotId: slot.id }
