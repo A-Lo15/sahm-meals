@@ -7,8 +7,10 @@ import {
   addRecipeToDay,
   removeSlot,
   updateSlotServings,
+  importAndAddToDay,
 } from './actions'
 import type { SlotWithRecipe, RecipeOption } from '@/lib/types'
+import type { ParsedRecipe } from '@/lib/parseRecipe'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -35,6 +37,8 @@ export default function PlannerClient({
   const [pickerDay, setPickerDay] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   // ── Week navigation ──────────────────────────────────────────────────────────
 
@@ -102,7 +106,82 @@ export default function PlannerClient({
     void updateSlotServings(slotId, value)
   }
 
+  async function handleImport() {
+    if (pickerDay === null) return
+    setImporting(true)
+    setImportError(null)
+
+    let recipe: ParsedRecipe
+    try {
+      const res = await fetch('/api/parse-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: search.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportError(data.error ?? 'Failed to import recipe.')
+        setImporting(false)
+        return
+      }
+      recipe = (data as { recipe: ParsedRecipe }).recipe
+    } catch {
+      setImportError('Network error — check your connection and try again.')
+      setImporting(false)
+      return
+    }
+
+    // Parse succeeded — close picker and apply optimistic slot
+    const tempId = `temp-${Date.now()}`
+    const savedPickerDay = pickerDay
+
+    const optimisticSlot: OptimisticSlot = {
+      id: tempId,
+      meal_plan_id: mealPlanId,
+      recipe_id: '',
+      day_of_week: savedPickerDay,
+      servings_override: null,
+      position: slots.filter((s) => s.day_of_week === savedPickerDay).length,
+      recipe: {
+        id: '',
+        title: recipe.title,
+        default_servings: recipe.default_servings,
+        source_image_url: recipe.source_image_url,
+        state: 'tried',
+      },
+      optimistic: true,
+    }
+
+    setSlots((prev) => [...prev, optimisticSlot])
+    setPickerDay(null)
+    setSearch('')
+    setImporting(false)
+
+    startTransition(async () => {
+      try {
+        const { recipeId, slotId } = await importAndAddToDay(recipe, mealPlanId, savedPickerDay)
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === tempId
+              ? {
+                  ...s,
+                  id: slotId,
+                  recipe_id: recipeId,
+                  recipe: { ...s.recipe, id: recipeId },
+                  optimistic: false,
+                }
+              : s
+          )
+        )
+      } catch {
+        setSlots((prev) => prev.filter((s) => s.id !== tempId))
+      }
+    })
+  }
+
   // ── Picker filtering ─────────────────────────────────────────────────────────
+
+  const importMode = search.startsWith('http://') || search.startsWith('https://')
 
   const filteredRecipes = recipes.filter((r) => {
     const matchesTab =
@@ -272,7 +351,7 @@ export default function PlannerClient({
         <>
           <div
             className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => { setPickerDay(null); setSearch('') }}
+            onClick={() => { setPickerDay(null); setSearch(''); setImportError(null) }}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[75vh] flex flex-col">
             {/* Sheet handle + title */}
@@ -283,7 +362,7 @@ export default function PlannerClient({
                   Add to {DAYS[pickerDay]}
                 </h2>
                 <button
-                  onClick={() => { setPickerDay(null); setSearch('') }}
+                  onClick={() => { setPickerDay(null); setSearch(''); setImportError(null) }}
                   className="text-gray-400 text-sm"
                 >
                   Cancel
@@ -320,9 +399,22 @@ export default function PlannerClient({
               ))}
             </div>
 
-            {/* Recipe list */}
+            {/* Recipe list / import */}
             <div className="overflow-y-auto flex-1 px-4 pb-6">
-              {filteredRecipes.length === 0 ? (
+              {importMode ? (
+                <div className="space-y-3 pt-2">
+                  {importError && (
+                    <p className="text-sm text-red-500">{importError}</p>
+                  )}
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl text-sm disabled:opacity-50 active:bg-blue-700"
+                  >
+                    {importing ? 'Importing…' : 'Import Recipe'}
+                  </button>
+                </div>
+              ) : filteredRecipes.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-8">No recipes found</p>
               ) : (
                 <div className="space-y-1">
