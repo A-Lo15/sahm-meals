@@ -363,7 +363,7 @@ export default function PlannerClient({
         <>
           <div
             className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false) }}
+            onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false); importingRef.current = false }}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[75vh] flex flex-col">
             {/* Sheet handle + title */}
@@ -374,7 +374,7 @@ export default function PlannerClient({
                   Add to {DAYS[pickerDay]}
                 </h2>
                 <button
-                  onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false) }}
+                  onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false); importingRef.current = false }}
                   className="text-gray-400 text-sm"
                 >
                   Cancel

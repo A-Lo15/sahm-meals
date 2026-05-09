@@ -1,0 +1,69 @@
+<h2>Where should URL import live in the picker?</h2>
+<p class="subtitle">The picker is a bottom sheet that slides up when you tap + on a day. Which entry point feels most natural?</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#f9fafb;border-radius:12px;padding:12px;font-family:sans-serif;font-size:13px;">
+        <div style="text-align:center;color:#6b7280;font-size:11px;margin-bottom:8px;">Add to Tuesday</div>
+        <div style="background:#f3f4f6;border-radius:8px;padding:8px 12px;color:#9ca3af;margin-bottom:8px;">Search recipes…</div>
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <div style="flex:1;background:#dcfce7;color:#15803d;border-radius:8px;padding:5px;text-align:center;font-weight:600;font-size:12px;">Library</div>
+          <div style="flex:1;background:#f3f4f6;color:#6b7280;border-radius:8px;padding:5px;text-align:center;font-size:12px;">All Recipes</div>
+          <div style="flex:1;background:#f3f4f6;color:#6b7280;border-radius:8px;padding:5px;text-align:center;font-size:12px;">Import URL</div>
+        </div>
+        <div style="color:#9ca3af;font-size:12px;text-align:center;padding:8px 0;">Tap "Import URL" tab to paste a link</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Third tab: "Import URL"</h3>
+      <p>Adds a third tab next to Library and All Recipes. Tapping it reveals a URL input field.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#f9fafb;border-radius:12px;padding:12px;font-family:sans-serif;font-size:13px;">
+        <div style="text-align:center;color:#6b7280;font-size:11px;margin-bottom:8px;">Add to Tuesday</div>
+        <div style="background:#f3f4f6;border-radius:8px;padding:8px 12px;color:#9ca3af;margin-bottom:8px;">Search recipes…</div>
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <div style="flex:1;background:#dcfce7;color:#15803d;border-radius:8px;padding:5px;text-align:center;font-weight:600;font-size:12px;">Library</div>
+          <div style="flex:1;background:#f3f4f6;color:#6b7280;border-radius:8px;padding:5px;text-align:center;font-size:12px;">All Recipes</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;color:#6b7280;font-size:12px;">🍽 Chicken Tikka Masala</div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;color:#6b7280;font-size:12px;margin-top:4px;">🍽 Pasta Primavera</div>
+        <div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:8px;text-align:center;">
+          <span style="color:#2563eb;font-size:12px;font-weight:500;">+ Import from URL</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Footer link at bottom of list</h3>
+      <p>A persistent "Import from URL" link at the bottom of the recipe list. Tapping expands a URL input inline.</p>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#f9fafb;border-radius:12px;padding:12px;font-family:sans-serif;font-size:13px;">
+        <div style="text-align:center;color:#6b7280;font-size:11px;margin-bottom:8px;">Add to Tuesday</div>
+        <div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:8px 12px;color:#1d4ed8;margin-bottom:8px;">https://cooking.nytimes.com/…</div>
+        <div style="font-size:11px;color:#2563eb;margin-bottom:8px;">Looks like a URL — tap Import to fetch this recipe</div>
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <div style="flex:1;background:#dcfce7;color:#15803d;border-radius:8px;padding:5px;text-align:center;font-weight:600;font-size:12px;">Library</div>
+          <div style="flex:1;background:#f3f4f6;color:#6b7280;border-radius:8px;padding:5px;text-align:center;font-size:12px;">All Recipes</div>
+        </div>
+        <div style="background:#2563eb;color:#fff;border-radius:8px;padding:8px 12px;text-align:center;font-size:12px;font-weight:600;">Import Recipe</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Smart search: auto-detect URL</h3>
+      <p>When a URL is pasted into the search box, the picker detects it and shows an "Import" button instead of search results.</p>
+    </div>
+  </div>
+
+</div>
