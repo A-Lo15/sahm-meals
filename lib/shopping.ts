@@ -58,13 +58,13 @@ const UNIT_ALIASES: Record<string, string> = {
   // Milliliter
   ml: 'milliliter', millilitre: 'milliliter', milliliters: 'milliliter', millilitres: 'milliliter',
   // Liter
-  'l.': 'liter', litre: 'liter', liters: 'liter', litres: 'liter',
+  'l.': 'liter', l: 'liter', litre: 'liter', liters: 'liter', litres: 'liter',
   // Gram
-  'g.': 'gram', grams: 'gram',
+  'g.': 'gram', g: 'gram', grams: 'gram',
   // Kilogram
-  'kg.': 'kilogram', kilograms: 'kilogram',
+  'kg.': 'kilogram', kg: 'kilogram', kilograms: 'kilogram',
   // Ounce (weight)
-  'oz.': 'ounce', ounces: 'ounce',
+  'oz.': 'ounce', oz: 'ounce', ounces: 'ounce',
   // Pound
   lb: 'pound', lbs: 'pound', 'lbs.': 'pound', pounds: 'pound',
 }
@@ -135,6 +135,7 @@ function normalizeName(raw: string): string {
     const stem = s.slice(0, -2)
     if (/(?:ch|sh|x|z)$/.test(stem)) return stem
   }
+  if (s.endsWith('us')) return s
   if (s.endsWith('s') && s.length > 3 && !s.endsWith('ss')) return s.slice(0, -1)
   return s
 }
