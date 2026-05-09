@@ -39,7 +39,6 @@ function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString()
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const UNIT_ALIASES: Record<string, string> = {
   // Teaspoon
   tsp: 'teaspoon', teaspoons: 'teaspoon',
@@ -69,7 +68,6 @@ const UNIT_ALIASES: Record<string, string> = {
   lb: 'pound', lbs: 'pound', 'lbs.': 'pound', pounds: 'pound',
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function normalizeUnit(unit: string): string {
   const u = unit.toLowerCase().trim()
   return UNIT_ALIASES[u] ?? u
@@ -84,14 +82,12 @@ const WEIGHT_UNITS = new Set([
   'gram', 'kilogram', 'ounce', 'pound',
 ])
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function unitFamily(unit: string): 'volume' | 'weight' | 'other' {
   if (VOLUME_UNITS.has(unit)) return 'volume'
   if (WEIGHT_UNITS.has(unit)) return 'weight'
   return 'other'
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const TO_TABLESPOONS: Record<string, number> = {
   teaspoon: 1 / 3,
   tablespoon: 1,
@@ -104,7 +100,6 @@ const TO_TABLESPOONS: Record<string, number> = {
   liter: 1000 / 14.787,
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const TO_GRAMS: Record<string, number> = {
   gram: 1,
   kilogram: 1000,
@@ -112,21 +107,18 @@ const TO_GRAMS: Record<string, number> = {
   pound: 453.592,
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function volumeFromCanonical(tbsp: number): { qty: number; unit: string } {
   if (tbsp >= 16) return { qty: tbsp / 16, unit: 'cup' }
   if (tbsp >= 1) return { qty: tbsp, unit: 'tablespoon' }
   return { qty: tbsp * 3, unit: 'teaspoon' }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function weightFromCanonical(grams: number): { qty: number; unit: string } {
   if (grams >= 453.592) return { qty: grams / 453.592, unit: 'pound' }
   if (grams >= 28.3495) return { qty: grams / 28.3495, unit: 'ounce' }
   return { qty: grams, unit: 'gram' }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function normalizeName(raw: string): string {
   const s = raw.toLowerCase().trim()
   if (s.endsWith('ies') && s.length > 4) return s.slice(0, -3) + 'y'
@@ -181,8 +173,15 @@ interface RawSlot {
   }
 }
 
+interface AggEntry {
+  canonical: number
+  family: 'volume' | 'weight' | 'other'
+  unit: string
+  category: IngredientCategory
+}
+
 export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
-  const agg = new Map<string, { qty: number; unit: string; category: IngredientCategory }>()
+  const agg = new Map<string, AggEntry>()
 
   for (const slot of slots) {
     const scale =
@@ -190,13 +189,32 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
 
     for (const ing of slot.recipe.ingredients ?? []) {
       if (!ing.name?.trim()) continue
-      const key = `${ing.name.toLowerCase().trim()}|||${ing.unit.toLowerCase().trim()}`
-      const qty = parseQty(ing.quantity) * scale
+
+      const normalizedName = normalizeName(ing.name)
+      const normalizedUnit = normalizeUnit(ing.unit)
+      const family = unitFamily(normalizedUnit)
+
+      const key =
+        family === 'other'
+          ? `${normalizedName}|||${normalizedUnit}`
+          : `${normalizedName}|||${family}`
+
+      const rawQty = parseQty(ing.quantity) * scale
+
+      let canonical: number
+      if (family === 'volume') {
+        canonical = rawQty * (TO_TABLESPOONS[normalizedUnit] ?? 1)
+      } else if (family === 'weight') {
+        canonical = rawQty * (TO_GRAMS[normalizedUnit] ?? 1)
+      } else {
+        canonical = rawQty
+      }
+
       const existing = agg.get(key)
       if (existing) {
-        existing.qty += qty
+        existing.canonical += canonical
       } else {
-        agg.set(key, { qty, unit: ing.unit, category: ing.category ?? '' })
+        agg.set(key, { canonical, family, unit: normalizedUnit, category: ing.category ?? '' })
       }
     }
   }
@@ -207,11 +225,28 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
     "Trader Joe's": [],
   }
 
-  for (const [key, { qty, unit, category }] of Array.from(agg.entries())) {
+  for (const [key, { canonical, family, unit, category }] of Array.from(agg.entries())) {
     const rawName = key.split('|||')[0]
     const name = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+
+    let displayQty: number
+    let displayUnit: string
+
+    if (family === 'volume') {
+      const converted = volumeFromCanonical(canonical)
+      displayQty = converted.qty
+      displayUnit = converted.unit
+    } else if (family === 'weight') {
+      const converted = weightFromCanonical(canonical)
+      displayQty = converted.qty
+      displayUnit = converted.unit
+    } else {
+      displayQty = canonical
+      displayUnit = unit
+    }
+
     const store = (STORE_FOR_CATEGORY[category] ?? "Trader Joe's") as StoreName
-    result[store].push({ name, quantity: formatQty(qty), unit, category, checked: false })
+    result[store].push({ name, quantity: formatQty(displayQty), unit: displayUnit, category, checked: false })
   }
 
   for (const store of STORES) {
