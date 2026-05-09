@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -39,6 +39,7 @@ export default function PlannerClient({
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const importingRef = useRef(false)
 
   // ── Week navigation ──────────────────────────────────────────────────────────
 
@@ -107,7 +108,8 @@ export default function PlannerClient({
   }
 
   async function handleImport() {
-    if (pickerDay === null) return
+    if (pickerDay === null || importingRef.current) return
+    importingRef.current = true
     setImporting(true)
     setImportError(null)
 
@@ -122,12 +124,21 @@ export default function PlannerClient({
       if (!res.ok) {
         setImportError(data.error ?? 'Failed to import recipe.')
         setImporting(false)
+        importingRef.current = false
         return
       }
-      recipe = (data as { recipe: ParsedRecipe }).recipe
+      const parsed = (data as { recipe?: ParsedRecipe }).recipe
+      if (!parsed?.title) {
+        setImportError('Failed to import recipe.')
+        setImporting(false)
+        importingRef.current = false
+        return
+      }
+      recipe = parsed
     } catch {
       setImportError('Network error — check your connection and try again.')
       setImporting(false)
+      importingRef.current = false
       return
     }
 
@@ -156,6 +167,7 @@ export default function PlannerClient({
     setPickerDay(null)
     setSearch('')
     setImporting(false)
+    importingRef.current = false
 
     startTransition(async () => {
       try {
@@ -351,7 +363,7 @@ export default function PlannerClient({
         <>
           <div
             className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => { setPickerDay(null); setSearch(''); setImportError(null) }}
+            onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false) }}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[75vh] flex flex-col">
             {/* Sheet handle + title */}
@@ -362,7 +374,7 @@ export default function PlannerClient({
                   Add to {DAYS[pickerDay]}
                 </h2>
                 <button
-                  onClick={() => { setPickerDay(null); setSearch(''); setImportError(null) }}
+                  onClick={() => { setPickerDay(null); setSearch(''); setImportError(null); setImporting(false) }}
                   className="text-gray-400 text-sm"
                 >
                   Cancel
