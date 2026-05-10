@@ -4,6 +4,8 @@ import { useState } from 'react'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
 import type { Ingredient } from '@/lib/types'
 
+type IngredientWithKey = Ingredient & { _key: string }
+
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 interface ImportReviewModalProps {
@@ -21,8 +23,8 @@ export default function ImportReviewModal({
 }: ImportReviewModalProps) {
   const [title, setTitle] = useState(recipe.title)
   const [servings, setServings] = useState(recipe.default_servings)
-  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
-    recipe.ingredients.map((i) => ({ ...i }))
+  const [ingredients, setIngredients] = useState<IngredientWithKey[]>(() =>
+    recipe.ingredients.map((i) => ({ ...i, _key: crypto.randomUUID() }))
   )
 
   function updateIngredient(
@@ -42,12 +44,15 @@ export default function ImportReviewModal({
   function addIngredient() {
     setIngredients((prev) => [
       ...prev,
-      { name: '', quantity: '', unit: '', category: 'other', notes: '' },
+      { name: '', quantity: '', unit: '', category: 'other', notes: '', _key: crypto.randomUUID() },
     ])
   }
 
   function handleConfirm() {
-    const cleaned = ingredients.filter((i) => i.name.trim() !== '')
+    const cleaned = ingredients
+      .filter((i) => i.name.trim() !== '')
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ _key, ...ing }) => ing)
     onConfirm({
       ...recipe,
       title: title.trim(),
@@ -119,7 +124,7 @@ export default function ImportReviewModal({
           </label>
           <div className="mt-2 space-y-2">
             {ingredients.map((ing, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={ing._key} className="flex items-center gap-2">
                 <input
                   type="text"
                   value={ing.quantity}
@@ -164,7 +169,8 @@ export default function ImportReviewModal({
       <div className="px-4 py-4 border-t border-gray-200 flex gap-3">
         <button
           onClick={() => onConfirm(recipe)}
-          className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl text-sm active:bg-gray-200"
+          disabled={!recipe.title?.trim()}
+          className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl text-sm active:bg-gray-200 disabled:opacity-50"
         >
           Import as-is
         </button>
