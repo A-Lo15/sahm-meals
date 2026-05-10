@@ -11,6 +11,7 @@ import {
 } from './actions'
 import type { SlotWithRecipe, RecipeOption } from '@/lib/types'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
+import ImportReviewModal from './ImportReviewModal'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -40,6 +41,7 @@ export default function PlannerClient({
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const importingRef = useRef(false)
+  const [pendingImport, setPendingImport] = useState<{ recipe: ParsedRecipe; day: number } | null>(null)
 
   // ── Week navigation ──────────────────────────────────────────────────────────
 
@@ -142,36 +144,43 @@ export default function PlannerClient({
       return
     }
 
-    // Parse succeeded — close picker and apply optimistic slot
-    const tempId = `temp-${Date.now()}`
+    // Parse succeeded — show review modal
     const savedPickerDay = pickerDay
+    setPickerDay(null)
+    setSearch('')
+    setImporting(false)
+    importingRef.current = false
+    setPendingImport({ recipe, day: savedPickerDay })
+  }
+
+  function handleConfirmImport(editedRecipe: ParsedRecipe) {
+    if (!pendingImport) return
+    const { day } = pendingImport
+    const tempId = `temp-${Date.now()}`
 
     const optimisticSlot: OptimisticSlot = {
       id: tempId,
       meal_plan_id: mealPlanId,
       recipe_id: '',
-      day_of_week: savedPickerDay,
+      day_of_week: day,
       servings_override: null,
-      position: slots.filter((s) => s.day_of_week === savedPickerDay).length,
+      position: slots.filter((s) => s.day_of_week === day).length,
       recipe: {
         id: '',
-        title: recipe.title,
-        default_servings: recipe.default_servings,
-        source_image_url: recipe.source_image_url,
+        title: editedRecipe.title,
+        default_servings: editedRecipe.default_servings,
+        source_image_url: editedRecipe.source_image_url,
         state: 'tried',
       },
       optimistic: true,
     }
 
     setSlots((prev) => [...prev, optimisticSlot])
-    setPickerDay(null)
-    setSearch('')
-    setImporting(false)
-    importingRef.current = false
+    setPendingImport(null)
 
     startTransition(async () => {
       try {
-        const { recipeId, slotId } = await importAndAddToDay(recipe, mealPlanId, savedPickerDay)
+        const { recipeId, slotId } = await importAndAddToDay(editedRecipe, mealPlanId, day)
         setSlots((prev) =>
           prev.map((s) =>
             s.id === tempId
@@ -189,6 +198,10 @@ export default function PlannerClient({
         setSlots((prev) => prev.filter((s) => s.id !== tempId))
       }
     })
+  }
+
+  function handleDismissImport() {
+    setPendingImport(null)
   }
 
   // ── Picker filtering ─────────────────────────────────────────────────────────
@@ -357,6 +370,15 @@ export default function PlannerClient({
           )
         })}
       </div>
+
+      {pendingImport !== null && (
+        <ImportReviewModal
+          recipe={pendingImport.recipe}
+          day={pendingImport.day}
+          onConfirm={handleConfirmImport}
+          onDismiss={handleDismissImport}
+        />
+      )}
 
       {/* Recipe picker bottom sheet */}
       {pickerDay !== null && (
