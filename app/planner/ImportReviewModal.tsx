@@ -172,7 +172,7 @@ export default function ImportReviewModal({
           disabled={!recipe.title?.trim()}
           className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl text-sm active:bg-gray-200 disabled:opacity-50"
         >
-          Import as-is
+          Import original
         </button>
         <button
           onClick={handleConfirm}
