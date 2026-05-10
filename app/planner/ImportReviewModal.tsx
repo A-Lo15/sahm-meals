@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { detectCategory } from '@/lib/parseRecipe'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
 import type { Ingredient } from '@/lib/types'
 
@@ -52,7 +53,7 @@ export default function ImportReviewModal({
     const cleaned = ingredients
       .filter((i) => i.name.trim() !== '')
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ _key, ...ing }) => ing)
+      .map(({ _key, ...ing }) => ({ ...ing, category: detectCategory(ing.name) }))
     onConfirm({
       ...recipe,
       title: title.trim(),

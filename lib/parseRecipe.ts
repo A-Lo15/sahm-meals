@@ -13,7 +13,7 @@ export interface ParsedRecipe {
 
 // ─── Category detection ───────────────────────────────────────────────────────
 
-function detectCategory(name: string): IngredientCategory {
+export function detectCategory(name: string): IngredientCategory {
   const n = name.toLowerCase()
   if (/beef|chicken|pork|lamb|salmon|tuna|shrimp|turkey|bacon|ham|sausage|steak|brisket|ground meat|prosciutto|anchov|fish|cod|halibut|tilapia|scallop|crab|lobster|clam|mussel/.test(n)) return 'meat'
   if (/\begg|milk\b|cream\b|butter|cheese|yogurt|parmesan|cheddar|mozzarella|ricotta|brie|gouda|feta|cream cheese|sour cream|half.and.half|whipping cream|heavy cream/.test(n)) return 'dairy'

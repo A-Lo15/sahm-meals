@@ -196,6 +196,7 @@ export default function PlannerClient({
         )
       } catch {
         setSlots((prev) => prev.filter((s) => s.id !== tempId))
+        setPendingImport({ recipe: editedRecipe, day })
       }
     })
   }
