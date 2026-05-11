@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useRef, useCallback } from 'react'
+import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { generateShoppingList, saveCheckedState } from './actions'
 import { STORES, type StoreAssignments, type StoreName, type ShoppingItem } from '@/lib/shopping'
@@ -55,6 +55,16 @@ export default function ShoppingClient({
   const isDragging = useRef<boolean>(false)
   const dragKey = useRef<string | null>(null)
   const dragRowRef = useRef<HTMLDivElement | null>(null)
+
+  // Cleanup on unmount — prevents writing to detached DOM nodes after navigation
+  useEffect(() => {
+    return () => {
+      isDragging.current = false
+      dragKey.current = null
+      dragRowRef.current = null
+      if (undoTimer.current) clearTimeout(undoTimer.current)
+    }
+  }, [])
 
   function formatWeekLabel() {
     const start = new Date(weekStart)
@@ -289,7 +299,12 @@ export default function ShoppingClient({
                                     isDragging.current = true
                                     dragKey.current = rowKey
                                     dragRowRef.current = e.currentTarget as HTMLDivElement
-                                    dragRowRef.current.style.transition = 'none'
+                                    const el = e.currentTarget as HTMLDivElement
+                                    requestAnimationFrame(() => {
+                                      if (isDragging.current && dragKey.current === rowKey) {
+                                        el.style.transition = 'none'
+                                      }
+                                    })
                                   }}
                                   onTouchMove={(e) => {
                                     if (!isDragging.current || dragKey.current !== rowKey) return
@@ -320,6 +335,16 @@ export default function ShoppingClient({
                                         el.style.transform = 'translateX(0)'
                                       }
                                     }
+                                  }}
+                                  onTouchCancel={() => {
+                                    if (!isDragging.current || dragKey.current !== rowKey) return
+                                    isDragging.current = false
+                                    dragKey.current = null
+                                    if (dragRowRef.current) {
+                                      dragRowRef.current.style.transition = 'transform 0.2s ease'
+                                      dragRowRef.current.style.transform = isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)'
+                                    }
+                                    dragRowRef.current = null
                                   }}
                                 >
                                   <button
@@ -362,6 +387,7 @@ export default function ShoppingClient({
                                   className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
                                   style={{ width: REMOVE_BTN_WIDTH }}
                                   aria-label={`Remove ${item.name}`}
+                                  tabIndex={isOpen ? 0 : -1}
                                 >
                                   Remove
                                 </button>
