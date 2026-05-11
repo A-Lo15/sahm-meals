@@ -16,6 +16,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   '': 'Other',
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const REMOVE_BTN_WIDTH = 64 // px — width of the trailing Remove button
+
 interface Props {
   weekStart: string
   initialListId: string | null
@@ -39,6 +42,26 @@ export default function ShoppingClient({
   const [isPending, startTransition] = useTransition()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Swipe-to-remove state
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [swipeOpenKey, setSwipeOpenKey] = useState<string | null>(null)
+  const [pendingUndo, setPendingUndo] = useState<{
+    item: ShoppingItem
+    store: StoreName
+    index: number
+  } | null>(null)
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Touch gesture refs — mutated imperatively to avoid re-renders during drag
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const touchStartX = useRef<number>(0)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isDragging = useRef<boolean>(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const dragKey = useRef<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const dragRowRef = useRef<HTMLDivElement | null>(null)
+
   function formatWeekLabel() {
     const start = new Date(weekStart)
     const end = new Date(weekStart)
@@ -48,6 +71,9 @@ export default function ShoppingClient({
   }
 
   function handleGenerate() {
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setPendingUndo(null)
+    setSwipeOpenKey(null)
     startTransition(async () => {
       const result = await generateShoppingList(weekStart)
       if (result) {
@@ -78,6 +104,46 @@ export default function ShoppingClient({
     }
     setAssignments(updated)
     scheduleSave(listId, updated)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function removeItem(store: StoreName, index: number) {
+    if (!assignments || !listId) return
+
+    const item = assignments[store][index]
+
+    // Commit any prior pending removal immediately before starting a new one.
+    // `assignments` at this point already reflects the prior removal (setAssignments
+    // was called synchronously for it).
+    if (pendingUndo && undoTimer.current) {
+      clearTimeout(undoTimer.current)
+      scheduleSave(listId, assignments)
+    }
+
+    const updated: StoreAssignments = {
+      ...assignments,
+      [store]: assignments[store].filter((_, i) => i !== index),
+    }
+    setAssignments(updated)
+    setSwipeOpenKey(null)
+    setPendingUndo({ item, store, index })
+
+    undoTimer.current = setTimeout(() => {
+      scheduleSave(listId, updated)
+      setPendingUndo(null)
+    }, 4000)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function undoRemove() {
+    if (!pendingUndo || !assignments) return
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+
+    const { item, store, index } = pendingUndo
+    const restored = [...assignments[store]]
+    restored.splice(index, 0, item)
+    setAssignments({ ...assignments, [store]: restored })
+    setPendingUndo(null)
   }
 
   // Group items by category for display
