@@ -16,7 +16,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   '': 'Other',
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const REMOVE_BTN_WIDTH = 64 // px — width of the trailing Remove button
 
 interface Props {
@@ -43,7 +42,6 @@ export default function ShoppingClient({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Swipe-to-remove state
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [swipeOpenKey, setSwipeOpenKey] = useState<string | null>(null)
   const [pendingUndo, setPendingUndo] = useState<{
     item: ShoppingItem
@@ -53,13 +51,9 @@ export default function ShoppingClient({
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Touch gesture refs — mutated imperatively to avoid re-renders during drag
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const touchStartX = useRef<number>(0)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isDragging = useRef<boolean>(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const dragKey = useRef<string | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const dragRowRef = useRef<HTMLDivElement | null>(null)
 
   function formatWeekLabel() {
@@ -106,7 +100,6 @@ export default function ShoppingClient({
     scheduleSave(listId, updated)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function removeItem(store: StoreName, index: number) {
     if (!assignments || !listId) return
 
@@ -276,34 +269,103 @@ export default function ShoppingClient({
                         <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                           {items.map((item, idx) => {
                             const globalIdx = assignments[activeStore].indexOf(item)
+                            const rowKey = `${activeStore}-${globalIdx}`
+                            const isOpen = swipeOpenKey === rowKey
+
                             return (
-                              <button
-                                key={idx}
-                                onClick={() => toggleItem(activeStore, globalIdx)}
-                                className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
-                              >
-                                <span
-                                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
-                                    item.checked
-                                      ? 'bg-green-500 border-green-500 text-white'
-                                      : 'border-gray-300'
-                                  }`}
+                              <div key={idx} className="relative overflow-hidden">
+                                {/* Sliding row content */}
+                                <div
+                                  style={{
+                                    transform: isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)',
+                                    transition: 'transform 0.2s ease',
+                                  }}
+                                  onTouchStart={(e) => {
+                                    // Snap any currently-open row closed before starting a new drag
+                                    if (swipeOpenKey !== null && swipeOpenKey !== rowKey) {
+                                      setSwipeOpenKey(null)
+                                    }
+                                    touchStartX.current = e.touches[0].clientX
+                                    isDragging.current = true
+                                    dragKey.current = rowKey
+                                    dragRowRef.current = e.currentTarget as HTMLDivElement
+                                    dragRowRef.current.style.transition = 'none'
+                                  }}
+                                  onTouchMove={(e) => {
+                                    if (!isDragging.current || dragKey.current !== rowKey) return
+                                    const deltaX = e.touches[0].clientX - touchStartX.current
+                                    if (deltaX >= 0) return
+                                    const clamped = Math.max(-REMOVE_BTN_WIDTH, deltaX)
+                                    if (dragRowRef.current) {
+                                      dragRowRef.current.style.transform = `translateX(${clamped}px)`
+                                    }
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    if (!isDragging.current || dragKey.current !== rowKey) return
+                                    const deltaX = e.changedTouches[0].clientX - touchStartX.current
+                                    isDragging.current = false
+                                    dragKey.current = null
+
+                                    if (dragRowRef.current) {
+                                      dragRowRef.current.style.transition = 'transform 0.2s ease'
+                                    }
+                                    dragRowRef.current = null
+
+                                    if (deltaX < -40) {
+                                      setSwipeOpenKey(rowKey)
+                                    } else {
+                                      // Snap back — if this row was already open, keep it open
+                                      if (!isOpen) {
+                                        const el = e.currentTarget as HTMLDivElement
+                                        el.style.transform = 'translateX(0)'
+                                      }
+                                    }
+                                  }}
                                 >
-                                  {item.checked ? '✓' : ''}
-                                </span>
-                                <span
-                                  className={`flex-1 text-sm ${
-                                    item.checked ? 'line-through text-gray-400' : 'text-gray-800'
-                                  }`}
+                                  <button
+                                    onClick={() => {
+                                      if (isOpen) {
+                                        setSwipeOpenKey(null)
+                                      } else {
+                                        toggleItem(activeStore, globalIdx)
+                                      }
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
+                                  >
+                                    <span
+                                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
+                                        item.checked
+                                          ? 'bg-green-500 border-green-500 text-white'
+                                          : 'border-gray-300'
+                                      }`}
+                                    >
+                                      {item.checked ? '✓' : ''}
+                                    </span>
+                                    <span
+                                      className={`flex-1 text-sm ${
+                                        item.checked ? 'line-through text-gray-400' : 'text-gray-800'
+                                      }`}
+                                    >
+                                      {item.name}
+                                    </span>
+                                    {(item.quantity || item.unit) && (
+                                      <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
+                                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Remove button — revealed when content slides left */}
+                                <button
+                                  onClick={() => removeItem(activeStore, globalIdx)}
+                                  className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
+                                  style={{ width: REMOVE_BTN_WIDTH }}
+                                  aria-label={`Remove ${item.name}`}
                                 >
-                                  {item.name}
-                                </span>
-                                {(item.quantity || item.unit) && (
-                                  <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
-                                    {[item.quantity, item.unit].filter(Boolean).join(' ')}
-                                  </span>
-                                )}
-                              </button>
+                                  Remove
+                                </button>
+                              </div>
                             )
                           })}
                         </div>
