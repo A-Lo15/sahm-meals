@@ -137,7 +137,6 @@ export default function ShoppingClient({
     }, 4000)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function undoRemove() {
     if (!pendingUndo || !assignments) return
     if (undoTimer.current) clearTimeout(undoTimer.current)
@@ -403,6 +402,19 @@ export default function ShoppingClient({
             )}
           </div>
         </>
+      )}
+
+      {/* Undo toast */}
+      {pendingUndo && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 flex items-center justify-between bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-lg">
+          <span className="text-sm">{pendingUndo.item.name} removed</span>
+          <button
+            onClick={undoRemove}
+            className="text-sm font-semibold text-green-400 ml-4"
+          >
+            Undo
+          </button>
+        </div>
       )}
     </div>
   )
