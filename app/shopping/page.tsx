@@ -64,6 +64,7 @@ export default async function ShoppingPage({
       initialAssignments={existing?.storeAssignments ?? null}
       initialGeneratedAt={existing?.generatedAt ?? null}
       hasMeals={hasMeals}
+      initialManualItems={existing?.manualItems ?? []}
     />
   )
 }

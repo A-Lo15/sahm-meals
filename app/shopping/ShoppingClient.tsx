@@ -2,8 +2,8 @@
 
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { generateShoppingList, saveCheckedState } from './actions'
-import { STORES, type StoreAssignments, type StoreName, type ShoppingItem } from '@/lib/shopping'
+import { generateShoppingList, saveCheckedState, saveManualItems } from './actions'
+import { STORES, type StoreAssignments, type StoreName, type ShoppingItem, type ManualItem } from '@/lib/shopping'
 
 const CATEGORY_LABELS: Record<string, string> = {
   produce: 'Produce',
@@ -24,6 +24,7 @@ interface Props {
   initialAssignments: StoreAssignments | null
   initialGeneratedAt: string | null
   hasMeals: boolean
+  initialManualItems: ManualItem[]
 }
 
 export default function ShoppingClient({
@@ -32,6 +33,7 @@ export default function ShoppingClient({
   initialAssignments,
   initialGeneratedAt,
   hasMeals,
+  initialManualItems,
 }: Props) {
   const router = useRouter()
   const [listId, setListId] = useState(initialListId)
@@ -41,12 +43,22 @@ export default function ShoppingClient({
   const [isPending, startTransition] = useTransition()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [manualItems, setManualItems] = useState<ManualItem[]>(initialManualItems)
+
+  // Add-item bottom sheet state
+  const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemQty, setNewItemQty] = useState('')
+  const [newItemUnit, setNewItemUnit] = useState('')
+  const [newItemStore, setNewItemStore] = useState<StoreName>('Whole Foods')
+
   // Swipe-to-remove state
   const [swipeOpenKey, setSwipeOpenKey] = useState<string | null>(null)
   const [pendingUndo, setPendingUndo] = useState<{
     item: ShoppingItem
     store: StoreName
     index: number
+    manualItemsSnapshot: ManualItem[] | null
   } | null>(null)
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -84,6 +96,7 @@ export default function ShoppingClient({
         setListId(result.id)
         setAssignments(result.storeAssignments)
         setGeneratedAt(result.generatedAt)
+        setManualItems(result.manualItems)
       }
     })
   }
@@ -116,11 +129,20 @@ export default function ShoppingClient({
     const item = assignments[store][index]
 
     // Commit any prior pending removal immediately before starting a new one.
-    // `assignments` at this point already reflects the prior removal (setAssignments
-    // was called synchronously for it).
     if (pendingUndo && undoTimer.current) {
       clearTimeout(undoTimer.current)
       scheduleSave(listId, assignments)
+      if (pendingUndo.manualItemsSnapshot !== null) {
+        startTransition(() => saveManualItems(listId, manualItems))
+      }
+    }
+
+    // If this is a manual item, remove it from manualItems state immediately.
+    // The DB write is deferred to the undo timer so undo can restore it.
+    let nextManualItems = manualItems
+    if (item.manual && item.manualId) {
+      nextManualItems = manualItems.filter((mi) => mi.id !== item.manualId)
+      setManualItems(nextManualItems)
     }
 
     const updated: StoreAssignments = {
@@ -129,10 +151,18 @@ export default function ShoppingClient({
     }
     setAssignments(updated)
     setSwipeOpenKey(null)
-    setPendingUndo({ item, store, index })
+    setPendingUndo({
+      item,
+      store,
+      index,
+      manualItemsSnapshot: item.manual ? manualItems : null,
+    })
 
     undoTimer.current = setTimeout(() => {
       scheduleSave(listId, updated)
+      if (item.manual) {
+        startTransition(() => saveManualItems(listId, nextManualItems))
+      }
       setPendingUndo(null)
     }, 4000)
   }
@@ -141,11 +171,54 @@ export default function ShoppingClient({
     if (!pendingUndo || !assignments) return
     if (undoTimer.current) clearTimeout(undoTimer.current)
 
-    const { item, store, index } = pendingUndo
+    const { item, store, index, manualItemsSnapshot } = pendingUndo
     const restored = [...assignments[store]]
     restored.splice(index, 0, item)
     setAssignments({ ...assignments, [store]: restored })
+
+    if (manualItemsSnapshot !== null) {
+      setManualItems(manualItemsSnapshot)
+    }
+
     setPendingUndo(null)
+  }
+
+  function addManualItem() {
+    if (!listId || !assignments || !newItemName.trim()) return
+
+    const id = crypto.randomUUID()
+    const newManualItem: ManualItem = {
+      id,
+      store: newItemStore,
+      name: newItemName.trim(),
+      quantity: newItemQty.trim(),
+      unit: newItemUnit.trim(),
+    }
+    const newShoppingItem: ShoppingItem = {
+      name: newManualItem.name,
+      quantity: newManualItem.quantity,
+      unit: newManualItem.unit,
+      category: 'other',
+      checked: false,
+      manual: true,
+      manualId: id,
+    }
+
+    const updatedManualItems = [...manualItems, newManualItem]
+    const updatedAssignments: StoreAssignments = {
+      ...assignments,
+      [newItemStore]: [...assignments[newItemStore], newShoppingItem],
+    }
+
+    setManualItems(updatedManualItems)
+    setAssignments(updatedAssignments)
+    setAddSheetOpen(false)
+    setNewItemName('')
+    setNewItemQty('')
+    setNewItemUnit('')
+
+    startTransition(() => saveManualItems(listId, updatedManualItems))
+    scheduleSave(listId, updatedAssignments)
   }
 
   // Group items by category for display
@@ -180,13 +253,24 @@ export default function ShoppingClient({
               <h1 className="font-bold text-gray-900 text-base">Shopping List</h1>
               <p className="text-xs text-gray-400">{formatWeekLabel()}</p>
             </div>
-            <button
-              onClick={handleGenerate}
-              disabled={isPending || !hasMeals}
-              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-xl disabled:opacity-40 active:bg-green-700"
-            >
-              {isPending ? 'Building…' : assignments ? 'Regenerate' : 'Build List'}
-            </button>
+            <div className="flex items-center gap-2">
+              {listId && (
+                <button
+                  onClick={() => setAddSheetOpen(true)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 text-xl font-light leading-none"
+                  aria-label="Add item"
+                >
+                  +
+                </button>
+              )}
+              <button
+                onClick={handleGenerate}
+                disabled={isPending || !hasMeals}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-xl disabled:opacity-40 active:bg-green-700"
+              >
+                {isPending ? 'Building…' : assignments ? 'Regenerate' : 'Build List'}
+              </button>
+            </div>
           </div>
           {generatedAt && (
             <p className="text-xs text-gray-400 mt-1">
@@ -417,6 +501,97 @@ export default function ShoppingClient({
           >
             Undo
           </button>
+        </div>
+      )}
+
+      {/* Add item bottom sheet */}
+      {addSheetOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setAddSheetOpen(false)}
+          />
+          <div className="relative bg-white rounded-t-2xl px-4 pt-5 space-y-4" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
+            <h2 className="text-base font-semibold text-gray-900 text-center">Add Item</h2>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Item name
+              </label>
+              <input
+                type="text"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                placeholder="e.g. Granola bars"
+                autoFocus
+                className="mt-1.5 w-full px-4 py-2.5 bg-gray-100 rounded-xl text-base focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Qty
+                </label>
+                <input
+                  type="text"
+                  value={newItemQty}
+                  onChange={(e) => setNewItemQty(e.target.value)}
+                  placeholder="2"
+                  className="mt-1.5 w-full px-4 py-2.5 bg-gray-100 rounded-xl text-base focus:outline-none"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Unit
+                </label>
+                <input
+                  type="text"
+                  value={newItemUnit}
+                  onChange={(e) => setNewItemUnit(e.target.value)}
+                  placeholder="bags"
+                  className="mt-1.5 w-full px-4 py-2.5 bg-gray-100 rounded-xl text-base focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Store
+              </label>
+              <div className="flex gap-2 mt-1.5">
+                {STORES.map((store) => (
+                  <button
+                    key={store}
+                    onClick={() => setNewItemStore(store)}
+                    className={`flex-1 py-2 text-xs font-medium rounded-xl border transition-colors ${
+                      newItemStore === store
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-gray-100 text-gray-600 border-transparent'
+                    }`}
+                  >
+                    {store === 'Whole Foods' ? 'WF' : store === "Sam's Club" ? "Sam's" : "TJ's"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setAddSheetOpen(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl text-sm active:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addManualItem}
+                disabled={!newItemName.trim()}
+                className="flex-1 py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 active:bg-green-700"
+              >
+                Add
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
