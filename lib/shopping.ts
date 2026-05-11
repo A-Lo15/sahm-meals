@@ -155,6 +155,16 @@ export interface ShoppingItem {
   unit: string
   category: IngredientCategory
   checked: boolean
+  manual?: boolean   // true for user-added items not from any recipe
+  manualId?: string  // stable UUID matching ManualItem.id; present when manual === true
+}
+
+export interface ManualItem {
+  id: string       // crypto.randomUUID() — stable identity for removal and dedup
+  store: StoreName
+  name: string
+  quantity: string // empty string if not provided by user
+  unit: string     // empty string if not provided by user
 }
 
 export type StoreAssignments = Record<StoreName, ShoppingItem[]>
