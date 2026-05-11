@@ -268,6 +268,9 @@ export default function ShoppingClient({
             ) : (
               (() => {
                 const groups = groupByCategory(assignments[activeStore])
+                const globalIdxMap = new Map<ShoppingItem, number>(
+                  assignments[activeStore].map((item, i) => [item, i])
+                )
                 return (
                   <div className="space-y-4">
                     {Array.from(groups.entries()).map(([cat, items]) => (
@@ -277,7 +280,7 @@ export default function ShoppingClient({
                         </p>
                         <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                           {items.map((item, idx) => {
-                            const globalIdx = assignments[activeStore].indexOf(item)
+                            const globalIdx = globalIdxMap.get(item) ?? 0
                             const rowKey = `${activeStore}-${globalIdx}`
                             const isOpen = swipeOpenKey === rowKey
 
@@ -406,7 +409,7 @@ export default function ShoppingClient({
 
       {/* Undo toast */}
       {pendingUndo && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 flex items-center justify-between bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-lg">
+        <div className="fixed left-4 right-4 z-50 flex items-center justify-between bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-lg" style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <span className="text-sm">{pendingUndo.item.name} removed</span>
           <button
             onClick={undoRemove}
