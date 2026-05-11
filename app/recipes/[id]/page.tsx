@@ -3,12 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import StateControls from './StateControls'
+import RecipeIngredients from './RecipeIngredients'
 import type { Recipe, Ingredient } from '@/lib/types'
-
-function fmtIngredient(ing: Ingredient): string {
-  const parts = [ing.quantity, ing.unit, ing.name].filter(Boolean).join(' ')
-  return ing.notes ? `${parts} (${ing.notes})` : parts
-}
 
 export default async function RecipeDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -58,38 +54,25 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
             {recipe.description && (
               <p className="text-gray-500 mt-1 text-base">{recipe.description}</p>
             )}
-            <div className="flex items-center gap-2 mt-2 text-sm text-gray-400 flex-wrap">
-              <span>Serves {recipe.default_servings}</span>
-              {recipe.source_url && (
-                <>
-                  <span>·</span>
-                  <a
-                    href={recipe.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-green-600"
-                  >
-                    Source ↗
-                  </a>
-                </>
-              )}
-            </div>
+            {recipe.source_url && (
+              <div className="flex items-center gap-2 mt-2 text-sm text-gray-400">
+                <a
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-600"
+                >
+                  Source ↗
+                </a>
+              </div>
+            )}
           </div>
 
           {ingredients.length > 0 && (
-            <section>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                Ingredients
-              </h2>
-              <ul className="space-y-2">
-                {ingredients.map((ing, i) => (
-                  <li key={i} className="flex items-start gap-2 text-gray-800 text-base">
-                    <span className="text-gray-300 mt-1 leading-none">•</span>
-                    <span>{fmtIngredient(ing)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <RecipeIngredients
+              ingredients={ingredients}
+              defaultServings={recipe.default_servings}
+            />
           )}
 
           {steps.length > 0 && (

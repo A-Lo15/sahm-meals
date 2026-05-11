@@ -27,7 +27,7 @@ export function detectCategory(name: string): IngredientCategory {
 // ─── Ingredient string parser ─────────────────────────────────────────────────
 
 const UNIT_LIST = [
-  'cups?', 'tablespoons?', 'tbsp\\.?', 'tbs\\.?', 'teaspoons?', 'tsp\\.?',
+  'cups?', 'c\\.', 'tablespoons?', 'tbsp\\.?', 'tbs\\.?', 'teaspoons?', 'tsp\\.?',
   'ounces?', 'oz\\.?', 'pounds?', 'lbs?\\.?', 'grams?', '\\bg\\.?\\b',
   'kilograms?', 'kg\\.?', 'milligrams?', 'liters?', 'litres?', '\\bl\\.?\\b',
   'milliliters?', 'millilitres?', 'ml\\.?', 'pints?', 'quarts?', 'gallons?',
@@ -35,6 +35,19 @@ const UNIT_LIST = [
   'heads?', 'slices?', 'pieces?', 'cans?', 'jars?', 'packages?', 'pkg\\.?',
   'sticks?', 'sprigs?', 'stalks?',
 ]
+
+const UNIT_NORMALIZE: Record<string, string> = {
+  c: 'cup', cups: 'cup',
+  tbsp: 'tablespoon', tbs: 'tablespoon', tablespoons: 'tablespoon',
+  tsp: 'teaspoon', teaspoons: 'teaspoon',
+  oz: 'ounce', ounces: 'ounce',
+  lb: 'pound', lbs: 'pound', pounds: 'pound',
+  g: 'gram', grams: 'gram',
+  kg: 'kilogram', kilograms: 'kilogram',
+  ml: 'milliliter', milliliters: 'milliliter', millilitres: 'milliliter',
+  l: 'liter', liters: 'liter', litres: 'liter',
+  pkg: 'package', packages: 'package',
+}
 const UNIT_RE = new RegExp(
   `^([\\d¼½¾⅓⅔⅛⅜⅝⅞][\\d\\s./⁄-]*?)\\s+(${UNIT_LIST.join('|')})(?:\\s+|$)(.*)`,
   'i'
@@ -46,10 +59,11 @@ function parseIngredient(raw: string): Ingredient {
 
   const unitMatch = text.match(UNIT_RE)
   if (unitMatch) {
+    const rawUnit = unitMatch[2].replace(/\.$/, '').toLowerCase()
     return {
       name: unitMatch[3].replace(/^,\s*/, '').trim(),
       quantity: unitMatch[1].trim(),
-      unit: unitMatch[2].replace(/\.$/, '').toLowerCase(),
+      unit: UNIT_NORMALIZE[rawUnit] ?? rawUnit,
       category: detectCategory(unitMatch[3]),
       notes: '',
     }
