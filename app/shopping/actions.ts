@@ -3,7 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
-import { buildStoreAssignments, STORES, type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { buildStoreAssignments, type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { type Store } from '@/lib/stores'
 
 async function getContext() {
   const supabase = await createClient()
@@ -24,16 +25,35 @@ async function getContext() {
   return { db, householdId }
 }
 
+async function loadStores(
+  db: ReturnType<typeof createAdminClient>,
+  householdId: string
+): Promise<Store[]> {
+  const { data } = await db
+    .from('stores')
+    .select('id, name, abbreviation, display_order')
+    .eq('household_id', householdId)
+    .order('display_order', { ascending: true })
+  return (data ?? []).map(row => ({
+    id: row.id as string,
+    name: row.name as string,
+    abbreviation: row.abbreviation as string,
+    displayOrder: row.display_order as number,
+  }))
+}
+
 export interface ShoppingListData {
   id: string
   storeAssignments: StoreAssignments
   generatedAt: string
   mealPlanId: string
   manualItems: ManualItem[]
+  stores: Store[]
 }
 
 export async function generateShoppingList(weekStart: string): Promise<ShoppingListData | null> {
   const { db, householdId } = await getContext()
+  const stores = await loadStores(db, householdId)
 
   const { data: plan } = await db
     .from('meal_plans')
@@ -66,8 +86,8 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
   // Preserve checked states of manual items across regeneration
   const priorAssignments = (existingList?.store_assignments ?? {}) as StoreAssignments
   const priorCheckedMap = new Map<string, boolean>()
-  for (const store of STORES) {
-    for (const item of priorAssignments[store] ?? []) {
+  for (const storeName of Object.keys(priorAssignments)) {
+    for (const item of priorAssignments[storeName] ?? []) {
       if (item.manualId) priorCheckedMap.set(item.manualId, item.checked)
     }
   }
@@ -112,11 +132,13 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
     generatedAt: saved.generated_at,
     mealPlanId: plan.id,
     manualItems,
+    stores,
   }
 }
 
 export async function loadShoppingList(weekStart: string): Promise<ShoppingListData | null> {
   const { db, householdId } = await getContext()
+  const stores = await loadStores(db, householdId)
 
   const { data: plan } = await db
     .from('meal_plans')
@@ -142,8 +164,8 @@ export async function loadShoppingList(weekStart: string): Promise<ShoppingListD
   // store_assignments (e.g. scheduleSave debounce didn't fire before navigation).
   const storeAssignments = list.store_assignments as StoreAssignments
   const existingManualIds = new Set<string>()
-  for (const store of STORES) {
-    for (const item of storeAssignments[store] ?? []) {
+  for (const storeName of Object.keys(storeAssignments)) {
+    for (const item of storeAssignments[storeName] ?? []) {
       if (item.manualId) existingManualIds.add(item.manualId)
     }
   }
@@ -171,6 +193,7 @@ export async function loadShoppingList(weekStart: string): Promise<ShoppingListD
     generatedAt: list.generated_at,
     mealPlanId: plan.id,
     manualItems,
+    stores,
   }
 }
 

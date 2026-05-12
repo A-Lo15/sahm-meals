@@ -146,9 +146,6 @@ export const STORE_FOR_CATEGORY: Record<string, string> = {
   '': "Trader Joe's",
 }
 
-export const STORES = ['Whole Foods', "Sam's Club", "Trader Joe's"] as const
-export type StoreName = (typeof STORES)[number]
-
 export interface ShoppingItem {
   name: string
   quantity: string
@@ -161,13 +158,13 @@ export interface ShoppingItem {
 
 export interface ManualItem {
   id: string       // crypto.randomUUID() — stable identity for removal and dedup
-  store: StoreName
+  store: string
   name: string
   quantity: string // empty string if not provided by user
   unit: string     // empty string if not provided by user
 }
 
-export type StoreAssignments = Record<StoreName, ShoppingItem[]>
+export type StoreAssignments = Record<string, ShoppingItem[]>
 
 const CATEGORY_ORDER: IngredientCategory[] = [
   'produce', 'meat', 'dairy', 'pantry', 'frozen', 'household', 'other', '',
@@ -258,12 +255,12 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
       displayUnit = unit
     }
 
-    const store = (STORE_FOR_CATEGORY[category] ?? "Trader Joe's") as StoreName
+    const store = STORE_FOR_CATEGORY[category] ?? "Trader Joe's"
     result[store].push({ name, quantity: formatQty(displayQty), unit: displayUnit, category, checked: false })
   }
 
-  for (const store of STORES) {
-    result[store].sort((a, b) => {
+  for (const storeName of Object.keys(result)) {
+    result[storeName].sort((a, b) => {
       const ci = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
       return ci !== 0 ? ci : a.name.localeCompare(b.name)
     })
