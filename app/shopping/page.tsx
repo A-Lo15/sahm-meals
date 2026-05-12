@@ -55,10 +55,8 @@ export default async function ShoppingPage({
     hasMeals = (count ?? 0) > 0
   }
 
-  const [existing, stores] = await Promise.all([
-    loadShoppingList(weekStart),
-    getStores(),
-  ])
+  const existing = await loadShoppingList(weekStart)
+  const stores = existing?.stores ?? await getStores()
 
   return (
     <ShoppingClient
