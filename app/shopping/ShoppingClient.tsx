@@ -4,7 +4,8 @@ import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { generateShoppingList, saveCheckedState, saveManualItems } from './actions'
-import { type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { CATEGORY_ORDER, type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import type { IngredientCategory } from '@/lib/types'
 import { type Store } from '@/lib/stores'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -17,6 +18,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
   '': 'Other',
 }
+
+const BADGE_COLORS = [
+  'bg-green-100 text-green-700',
+  'bg-blue-100 text-blue-700',
+  'bg-yellow-100 text-yellow-800',
+  'bg-purple-100 text-purple-700',
+  'bg-pink-100 text-pink-700',
+  'bg-orange-100 text-orange-700',
+]
 
 const REMOVE_BTN_WIDTH = 64 // px — width of the trailing Remove button
 
@@ -44,7 +54,7 @@ export default function ShoppingClient({
   const [assignments, setAssignments] = useState<StoreAssignments | null>(initialAssignments)
   const [generatedAt, setGeneratedAt] = useState(initialGeneratedAt)
   const [stores, setStores] = useState<Store[]>(initialStores)
-  const [activeStore, setActiveStore] = useState<string>(initialStores[0]?.name ?? '')
+  const [activeTab, setActiveTab] = useState<string>('all')
   const [isPending, startTransition] = useTransition()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -56,6 +66,12 @@ export default function ShoppingClient({
   const [newItemQty, setNewItemQty] = useState('')
   const [newItemUnit, setNewItemUnit] = useState('')
   const [newItemStore, setNewItemStore] = useState<string>(initialStores[0]?.name ?? '')
+
+  // Re-route state
+  const [rerouteTarget, setRerouteTarget] = useState<{
+    item: ShoppingItem
+    fromStore: string
+  } | null>(null)
 
   // Swipe-to-remove state
   const [swipeOpenKey, setSwipeOpenKey] = useState<string | null>(null)
@@ -83,6 +99,11 @@ export default function ShoppingClient({
     }
   }, [])
 
+  function storeColorClass(storeName: string): string {
+    const idx = stores.findIndex(s => s.name === storeName)
+    return BADGE_COLORS[idx % BADGE_COLORS.length] ?? BADGE_COLORS[0]
+  }
+
   function formatWeekLabel() {
     const start = new Date(weekStart)
     const end = new Date(weekStart)
@@ -103,10 +124,10 @@ export default function ShoppingClient({
         setGeneratedAt(result.generatedAt)
         setManualItems(result.manualItems)
         setStores(result.stores)
-        setActiveStore(prev =>
-          result.stores.some(s => s.name === prev)
+        setActiveTab(prev =>
+          prev === 'all' || result.stores.some(s => s.name === prev)
             ? prev
-            : (result.stores[0]?.name ?? '')
+            : 'all'
         )
       }
     })
@@ -248,6 +269,9 @@ export default function ShoppingClient({
 
   const totalCount = (store: string) => assignments?.[store]?.length ?? 0
 
+  const allTotal = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.length ?? 0), 0)
+  const allUnchecked = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !i.checked).length ?? 0), 0)
+
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       {/* Header */}
@@ -338,15 +362,32 @@ export default function ShoppingClient({
           {/* Store tabs */}
           <div className="sticky top-[73px] z-10 bg-white border-b border-gray-200">
             <div className="max-w-lg mx-auto flex overflow-x-auto">
+              {/* All tab */}
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`flex-shrink-0 px-4 py-3 text-xs font-medium transition-colors border-b-2 ${
+                  activeTab === 'all'
+                    ? 'border-green-600 text-green-700'
+                    : 'border-transparent text-gray-500'
+                }`}
+              >
+                <span className="block">All</span>
+                {allTotal > 0 && (
+                  <span className={`text-xs ${allUnchecked === 0 ? 'text-green-500' : 'text-gray-400'}`}>
+                    {allUnchecked === 0 ? '✓' : allTotal}
+                  </span>
+                )}
+              </button>
+              {/* Per-store tabs */}
               {stores.map((store) => {
                 const remaining = uncheckedCount(store.name)
                 const total = totalCount(store.name)
                 return (
                   <button
                     key={store.id}
-                    onClick={() => setActiveStore(store.name)}
+                    onClick={() => setActiveTab(store.name)}
                     className={`flex-shrink-0 px-4 py-3 text-xs font-medium transition-colors border-b-2 ${
-                      activeStore === store.name
+                      activeTab === store.name
                         ? 'border-green-600 text-green-700'
                         : 'border-transparent text-gray-500'
                     }`}
@@ -363,149 +404,218 @@ export default function ShoppingClient({
             </div>
           </div>
 
-          {/* Items */}
-          <div className="max-w-lg mx-auto px-4 py-4">
-            {(assignments[activeStore] ?? []).length === 0 ? (
-              <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
-            ) : (
-              (() => {
-                const groups = groupByCategory(assignments[activeStore] ?? [])
-                const globalIdxMap = new Map<ShoppingItem, number>(
-                  (assignments[activeStore] ?? []).map((item, i) => [item, i])
-                )
-                return (
-                  <div className="space-y-4">
-                    {Array.from(groups.entries()).map(([cat, items]) => (
-                      <div key={cat}>
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                          {CATEGORY_LABELS[cat] ?? cat}
-                        </p>
-                        <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-                          {items.map((item, idx) => {
-                            const globalIdx = globalIdxMap.get(item) ?? 0
-                            const rowKey = `${activeStore}-${globalIdx}`
-                            const isOpen = swipeOpenKey === rowKey
-
-                            return (
-                              <div key={idx} className="relative overflow-hidden">
-                                {/* Sliding row content */}
-                                <div
-                                  style={{
-                                    transform: isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)',
-                                    transition: 'transform 0.2s ease',
-                                  }}
-                                  onTouchStart={(e) => {
-                                    // Snap any currently-open row closed before starting a new drag
-                                    if (swipeOpenKey !== null && swipeOpenKey !== rowKey) {
-                                      setSwipeOpenKey(null)
-                                    }
-                                    touchStartX.current = e.touches[0].clientX
-                                    isDragging.current = true
-                                    dragKey.current = rowKey
-                                    dragRowRef.current = e.currentTarget as HTMLDivElement
-                                    const el = e.currentTarget as HTMLDivElement
-                                    requestAnimationFrame(() => {
-                                      if (isDragging.current && dragKey.current === rowKey) {
-                                        el.style.transition = 'none'
-                                      }
-                                    })
-                                  }}
-                                  onTouchMove={(e) => {
-                                    if (!isDragging.current || dragKey.current !== rowKey) return
-                                    const deltaX = e.touches[0].clientX - touchStartX.current
-                                    if (deltaX >= 0) return
-                                    const clamped = Math.max(-REMOVE_BTN_WIDTH, deltaX)
-                                    if (dragRowRef.current) {
-                                      dragRowRef.current.style.transform = `translateX(${clamped}px)`
-                                    }
-                                  }}
-                                  onTouchEnd={(e) => {
-                                    if (!isDragging.current || dragKey.current !== rowKey) return
-                                    const deltaX = e.changedTouches[0].clientX - touchStartX.current
-                                    isDragging.current = false
-                                    dragKey.current = null
-
-                                    if (dragRowRef.current) {
-                                      dragRowRef.current.style.transition = 'transform 0.2s ease'
-                                    }
-                                    dragRowRef.current = null
-
-                                    if (deltaX < -40) {
-                                      setSwipeOpenKey(rowKey)
-                                    } else {
-                                      // Snap back — if this row was already open, keep it open
-                                      if (!isOpen) {
-                                        const el = e.currentTarget as HTMLDivElement
-                                        el.style.transform = 'translateX(0)'
-                                      }
-                                    }
-                                  }}
-                                  onTouchCancel={() => {
-                                    if (!isDragging.current || dragKey.current !== rowKey) return
-                                    isDragging.current = false
-                                    dragKey.current = null
-                                    if (dragRowRef.current) {
-                                      dragRowRef.current.style.transition = 'transform 0.2s ease'
-                                      dragRowRef.current.style.transform = isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)'
-                                    }
-                                    dragRowRef.current = null
-                                  }}
-                                >
-                                  <button
-                                    onClick={() => {
-                                      if (isOpen) {
-                                        setSwipeOpenKey(null)
-                                      } else {
-                                        toggleItem(activeStore, globalIdx)
-                                      }
-                                    }}
-                                    className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
+          {/* All tab content */}
+          {activeTab === 'all' && (
+            <div className="max-w-lg mx-auto px-4 py-4">
+              {allTotal === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-12">Nothing here</p>
+              ) : (
+                (() => {
+                  const allEntries: Array<{ item: ShoppingItem; storeName: string }> = []
+                  for (const store of stores) {
+                    for (const item of assignments[store.name] ?? []) {
+                      allEntries.push({ item, storeName: store.name })
+                    }
+                  }
+                  const groupMap = new Map<string, Array<{ item: ShoppingItem; storeName: string }>>()
+                  for (const entry of allEntries) {
+                    const cat = entry.item.category || 'other'
+                    if (!groupMap.has(cat)) groupMap.set(cat, [])
+                    groupMap.get(cat)!.push(entry)
+                  }
+                  const sortedGroups = Array.from(groupMap.entries()).sort(([a], [b]) => {
+                    const ai = CATEGORY_ORDER.indexOf(a as IngredientCategory)
+                    const bi = CATEGORY_ORDER.indexOf(b as IngredientCategory)
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+                  })
+                  return (
+                    <div className="space-y-4">
+                      {sortedGroups.map(([cat, entries]: [string, Array<{ item: ShoppingItem; storeName: string }>]) => (
+                        <div key={cat}>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                            {CATEGORY_LABELS[cat] ?? cat}
+                          </p>
+                          <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                            {entries.map(({ item, storeName }, idx) => {
+                              const abbr = stores.find(s => s.name === storeName)?.abbreviation ?? storeName
+                              return (
+                                <div key={idx} className="flex items-center gap-3 px-4 py-3.5">
+                                  <span
+                                    className={`flex-1 text-sm ${
+                                      item.checked ? 'line-through text-gray-400' : 'text-gray-800'
+                                    }`}
                                   >
-                                    <span
-                                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
-                                        item.checked
-                                          ? 'bg-green-500 border-green-500 text-white'
-                                          : 'border-gray-300'
-                                      }`}
-                                    >
-                                      {item.checked ? '✓' : ''}
+                                    {item.name}
+                                  </span>
+                                  {(item.quantity || item.unit) && (
+                                    <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
+                                      {[item.quantity, item.unit].filter(Boolean).join(' ')}
                                     </span>
-                                    <span
-                                      className={`flex-1 text-sm ${
-                                        item.checked ? 'line-through text-gray-400' : 'text-gray-800'
-                                      }`}
-                                    >
-                                      {item.name}
-                                    </span>
-                                    {(item.quantity || item.unit) && (
-                                      <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
-                                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
-                                      </span>
-                                    )}
+                                  )}
+                                  <button
+                                    onClick={() => setRerouteTarget({ item, fromStore: storeName })}
+                                    className={`text-xs font-bold px-2 py-1 rounded-md flex-shrink-0 ${storeColorClass(storeName)}`}
+                                  >
+                                    {abbr} ›
                                   </button>
                                 </div>
-
-                                {/* Remove button — revealed when content slides left */}
-                                <button
-                                  onClick={() => removeItem(activeStore, globalIdx)}
-                                  className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
-                                  style={{ width: REMOVE_BTN_WIDTH }}
-                                  aria-label={`Remove ${item.name}`}
-                                  tabIndex={isOpen ? 0 : -1}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()
-            )}
-          </div>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
+
+          {/* Per-store tab content */}
+          {activeTab !== 'all' && (
+            <div className="max-w-lg mx-auto px-4 py-4">
+              {(assignments[activeTab] ?? []).length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
+              ) : (
+                (() => {
+                  const groups = groupByCategory(assignments[activeTab] ?? [])
+                  const globalIdxMap = new Map<ShoppingItem, number>(
+                    (assignments[activeTab] ?? []).map((item, i) => [item, i])
+                  )
+                  return (
+                    <div className="space-y-4">
+                      {Array.from(groups.entries()).map(([cat, items]) => (
+                        <div key={cat}>
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                            {CATEGORY_LABELS[cat] ?? cat}
+                          </p>
+                          <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                            {items.map((item, idx) => {
+                              const globalIdx = globalIdxMap.get(item) ?? 0
+                              const rowKey = `${activeTab}-${globalIdx}`
+                              const isOpen = swipeOpenKey === rowKey
+
+                              return (
+                                <div key={idx} className="relative overflow-hidden">
+                                  {/* Sliding row content */}
+                                  <div
+                                    style={{
+                                      transform: isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)',
+                                      transition: 'transform 0.2s ease',
+                                    }}
+                                    onTouchStart={(e) => {
+                                      // Snap any currently-open row closed before starting a new drag
+                                      if (swipeOpenKey !== null && swipeOpenKey !== rowKey) {
+                                        setSwipeOpenKey(null)
+                                      }
+                                      touchStartX.current = e.touches[0].clientX
+                                      isDragging.current = true
+                                      dragKey.current = rowKey
+                                      dragRowRef.current = e.currentTarget as HTMLDivElement
+                                      const el = e.currentTarget as HTMLDivElement
+                                      requestAnimationFrame(() => {
+                                        if (isDragging.current && dragKey.current === rowKey) {
+                                          el.style.transition = 'none'
+                                        }
+                                      })
+                                    }}
+                                    onTouchMove={(e) => {
+                                      if (!isDragging.current || dragKey.current !== rowKey) return
+                                      const deltaX = e.touches[0].clientX - touchStartX.current
+                                      if (deltaX >= 0) return
+                                      const clamped = Math.max(-REMOVE_BTN_WIDTH, deltaX)
+                                      if (dragRowRef.current) {
+                                        dragRowRef.current.style.transform = `translateX(${clamped}px)`
+                                      }
+                                    }}
+                                    onTouchEnd={(e) => {
+                                      if (!isDragging.current || dragKey.current !== rowKey) return
+                                      const deltaX = e.changedTouches[0].clientX - touchStartX.current
+                                      isDragging.current = false
+                                      dragKey.current = null
+
+                                      if (dragRowRef.current) {
+                                        dragRowRef.current.style.transition = 'transform 0.2s ease'
+                                      }
+                                      dragRowRef.current = null
+
+                                      if (deltaX < -40) {
+                                        setSwipeOpenKey(rowKey)
+                                      } else {
+                                        // Snap back — if this row was already open, keep it open
+                                        if (!isOpen) {
+                                          const el = e.currentTarget as HTMLDivElement
+                                          el.style.transform = 'translateX(0)'
+                                        }
+                                      }
+                                    }}
+                                    onTouchCancel={() => {
+                                      if (!isDragging.current || dragKey.current !== rowKey) return
+                                      isDragging.current = false
+                                      dragKey.current = null
+                                      if (dragRowRef.current) {
+                                        dragRowRef.current.style.transition = 'transform 0.2s ease'
+                                        dragRowRef.current.style.transform = isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)'
+                                      }
+                                      dragRowRef.current = null
+                                    }}
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        if (isOpen) {
+                                          setSwipeOpenKey(null)
+                                        } else {
+                                          toggleItem(activeTab, globalIdx)
+                                        }
+                                      }}
+                                      className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
+                                    >
+                                      <span
+                                        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
+                                          item.checked
+                                            ? 'bg-green-500 border-green-500 text-white'
+                                            : 'border-gray-300'
+                                        }`}
+                                      >
+                                        {item.checked ? '✓' : ''}
+                                      </span>
+                                      <span
+                                        className={`flex-1 text-sm ${
+                                          item.checked ? 'line-through text-gray-400' : 'text-gray-800'
+                                        }`}
+                                      >
+                                        {item.name}
+                                      </span>
+                                      {(item.quantity || item.unit) && (
+                                        <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
+                                          {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  {/* Remove button — revealed when content slides left */}
+                                  <button
+                                    onClick={() => removeItem(activeTab, globalIdx)}
+                                    className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
+                                    style={{ width: REMOVE_BTN_WIDTH }}
+                                    aria-label={`Remove ${item.name}`}
+                                    tabIndex={isOpen ? 0 : -1}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
         </>
       )}
 
