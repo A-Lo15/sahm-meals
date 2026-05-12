@@ -101,7 +101,7 @@ export default function ShoppingClient({
 
   function storeColorClass(storeName: string): string {
     const idx = stores.findIndex(s => s.name === storeName)
-    return BADGE_COLORS[idx % BADGE_COLORS.length] ?? BADGE_COLORS[0]
+    return BADGE_COLORS[idx < 0 ? 0 : idx % BADGE_COLORS.length]!
   }
 
   function formatWeekLabel() {
@@ -436,10 +436,10 @@ export default function ShoppingClient({
                             {CATEGORY_LABELS[cat] ?? cat}
                           </p>
                           <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-                            {entries.map(({ item, storeName }, idx) => {
+                            {entries.map(({ item, storeName }) => {
                               const abbr = stores.find(s => s.name === storeName)?.abbreviation ?? storeName
                               return (
-                                <div key={idx} className="flex items-center gap-3 px-4 py-3.5">
+                                <div key={`${storeName}-${item.name}`} className="flex items-center gap-3 px-4 py-3.5">
                                   <span
                                     className={`flex-1 text-sm ${
                                       item.checked ? 'line-through text-gray-400' : 'text-gray-800'
