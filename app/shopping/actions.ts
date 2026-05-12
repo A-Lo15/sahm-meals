@@ -82,7 +82,9 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
     const prior = existingList.store_assignments as StoreAssignments
     for (const [storeName, items] of Object.entries(prior)) {
       for (const item of (items as ShoppingItem[])) {
-        if (!item.manual) {
+        if (!item.manual && !priorRouteMap.has(item.name.toLowerCase())) {
+          // item.name is normalizeName(ing.name) + capitalize; .toLowerCase() recovers
+          // the normalized rawName that buildStoreAssignments uses as its lookup key.
           priorRouteMap.set(item.name.toLowerCase(), storeName)
         }
       }

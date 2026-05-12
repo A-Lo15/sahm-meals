@@ -259,9 +259,10 @@ export function buildStoreAssignments(
     }
 
     const categoryDefault = STORE_FOR_CATEGORY[category]
+    const priorStore = priorRouteMap.get(rawName)
     let store: string
-    if (priorRouteMap.has(rawName) && storeNames.includes(priorRouteMap.get(rawName)!)) {
-      store = priorRouteMap.get(rawName)!
+    if (priorStore && storeNames.includes(priorStore)) {
+      store = priorStore
     } else if (categoryDefault && storeNames.includes(categoryDefault)) {
       store = categoryDefault
     } else {
