@@ -50,7 +50,7 @@ export async function createStore(name: string): Promise<Store> {
     .eq('household_id', householdId)
     .order('display_order', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
   const displayOrder = (last?.display_order ?? -1) + 1
 
   const { data, error } = await db
@@ -70,9 +70,10 @@ export async function createStore(name: string): Promise<Store> {
 
 export async function deleteStore(id: string): Promise<void> {
   const { db, householdId } = await getContext()
-  await db
+  const { error } = await db
     .from('stores')
     .delete()
     .eq('id', id)
     .eq('household_id', householdId)
+  if (error) throw error
 }
