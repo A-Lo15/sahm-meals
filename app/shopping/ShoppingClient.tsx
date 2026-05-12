@@ -258,6 +258,17 @@ export default function ShoppingClient({
       setRerouteTarget(null)
       return
     }
+
+    // Commit any pending removal before mutating assignments, same as removeItem does.
+    if (pendingUndo && undoTimer.current) {
+      clearTimeout(undoTimer.current)
+      scheduleSave(listId, assignments)
+      if (pendingUndo.manualItemsSnapshot !== null) {
+        startTransition(() => saveManualItems(listId, manualItems))
+      }
+      setPendingUndo(null)
+    }
+
     const fromItems = (assignments[fromStore] ?? []).filter(i => i !== item)
     const toItems = [...(assignments[toStore] ?? []), item]
     const updated: StoreAssignments = {
