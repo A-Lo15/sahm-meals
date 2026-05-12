@@ -253,6 +253,31 @@ export default function ShoppingClient({
     scheduleSave(listId, updatedAssignments)
   }
 
+  function rerouteItem(item: ShoppingItem, fromStore: string, toStore: string) {
+    if (!assignments || !listId || fromStore === toStore) {
+      setRerouteTarget(null)
+      return
+    }
+    const fromItems = (assignments[fromStore] ?? []).filter(i => i !== item)
+    const toItems = [...(assignments[toStore] ?? []), item]
+    const updated: StoreAssignments = {
+      ...assignments,
+      [fromStore]: fromItems,
+      [toStore]: toItems,
+    }
+    setAssignments(updated)
+    setRerouteTarget(null)
+    scheduleSave(listId, updated)
+
+    if (item.manual && item.manualId) {
+      const updatedManualItems = manualItems.map(mi =>
+        mi.id === item.manualId ? { ...mi, store: toStore } : mi
+      )
+      setManualItems(updatedManualItems)
+      startTransition(() => saveManualItems(listId, updatedManualItems))
+    }
+  }
+
   // Group items by category for display
   function groupByCategory(items: ShoppingItem[]) {
     const groups = new Map<string, ShoppingItem[]>()
@@ -629,6 +654,48 @@ export default function ShoppingClient({
           >
             Undo
           </button>
+        </div>
+      )}
+
+      {/* Re-route mini-sheet */}
+      {rerouteTarget && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setRerouteTarget(null)}
+          />
+          <div
+            className="relative bg-white rounded-t-2xl px-4 pt-4 space-y-1"
+            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="w-8 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-900 mb-3">
+              {rerouteTarget.item.name} — send to:
+            </p>
+            {stores.map((store) => (
+              <button
+                key={store.id}
+                onClick={() =>
+                  rerouteItem(rerouteTarget.item, rerouteTarget.fromStore, store.name)
+                }
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors ${
+                  store.name === rerouteTarget.fromStore
+                    ? 'bg-green-50'
+                    : 'active:bg-gray-50'
+                }`}
+              >
+                <span
+                  className={`text-xs font-bold px-2 py-1 rounded-md min-w-[2.5rem] text-center ${storeColorClass(store.name)}`}
+                >
+                  {store.abbreviation}
+                </span>
+                <span className="flex-1 text-sm text-gray-800">{store.name}</span>
+                {store.name === rerouteTarget.fromStore && (
+                  <span className="text-green-600 font-bold text-sm">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
