@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadShoppingList } from './actions'
+import { getStores } from './stores-actions'
 import ShoppingClient from './ShoppingClient'
 
 function getMondayOf(date: Date): string {
@@ -38,7 +39,6 @@ export default async function ShoppingPage({
     ? getMondayOf(new Date(params.week + 'T12:00:00'))
     : getMondayOf(new Date())
 
-  // Check if there are meals planned this week
   const { data: plan } = await db
     .from('meal_plans')
     .select('id')
@@ -55,7 +55,10 @@ export default async function ShoppingPage({
     hasMeals = (count ?? 0) > 0
   }
 
-  const existing = await loadShoppingList(weekStart)
+  const [existing, stores] = await Promise.all([
+    loadShoppingList(weekStart),
+    getStores(),
+  ])
 
   return (
     <ShoppingClient
@@ -65,6 +68,7 @@ export default async function ShoppingPage({
       initialGeneratedAt={existing?.generatedAt ?? null}
       hasMeals={hasMeals}
       initialManualItems={existing?.manualItems ?? []}
+      initialStores={stores}
     />
   )
 }

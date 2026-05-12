@@ -2,8 +2,10 @@
 
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { generateShoppingList, saveCheckedState, saveManualItems } from './actions'
-import { STORES, type StoreAssignments, type StoreName, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { type Store } from '@/lib/stores'
 
 const CATEGORY_LABELS: Record<string, string> = {
   produce: 'Produce',
@@ -25,6 +27,7 @@ interface Props {
   initialGeneratedAt: string | null
   hasMeals: boolean
   initialManualItems: ManualItem[]
+  initialStores: Store[]
 }
 
 export default function ShoppingClient({
@@ -34,12 +37,14 @@ export default function ShoppingClient({
   initialGeneratedAt,
   hasMeals,
   initialManualItems,
+  initialStores,
 }: Props) {
   const router = useRouter()
   const [listId, setListId] = useState(initialListId)
   const [assignments, setAssignments] = useState<StoreAssignments | null>(initialAssignments)
   const [generatedAt, setGeneratedAt] = useState(initialGeneratedAt)
-  const [activeStore, setActiveStore] = useState<StoreName>('Whole Foods')
+  const [stores, setStores] = useState<Store[]>(initialStores)
+  const [activeStore, setActiveStore] = useState<string>(initialStores[0]?.name ?? '')
   const [isPending, startTransition] = useTransition()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -50,13 +55,13 @@ export default function ShoppingClient({
   const [newItemName, setNewItemName] = useState('')
   const [newItemQty, setNewItemQty] = useState('')
   const [newItemUnit, setNewItemUnit] = useState('')
-  const [newItemStore, setNewItemStore] = useState<StoreName>('Whole Foods')
+  const [newItemStore, setNewItemStore] = useState<string>(initialStores[0]?.name ?? '')
 
   // Swipe-to-remove state
   const [swipeOpenKey, setSwipeOpenKey] = useState<string | null>(null)
   const [pendingUndo, setPendingUndo] = useState<{
     item: ShoppingItem
-    store: StoreName
+    store: string
     index: number
     manualItemsSnapshot: ManualItem[] | null
   } | null>(null)
@@ -97,6 +102,12 @@ export default function ShoppingClient({
         setAssignments(result.storeAssignments)
         setGeneratedAt(result.generatedAt)
         setManualItems(result.manualItems)
+        setStores(result.stores)
+        setActiveStore(prev =>
+          result.stores.some(s => s.name === prev)
+            ? prev
+            : (result.stores[0]?.name ?? '')
+        )
       }
     })
   }
@@ -111,7 +122,7 @@ export default function ShoppingClient({
     []
   )
 
-  function toggleItem(store: StoreName, index: number) {
+  function toggleItem(store: string, index: number) {
     if (!assignments || !listId) return
     const updated: StoreAssignments = {
       ...assignments,
@@ -123,7 +134,7 @@ export default function ShoppingClient({
     scheduleSave(listId, updated)
   }
 
-  function removeItem(store: StoreName, index: number) {
+  function removeItem(store: string, index: number) {
     if (!assignments || !listId) return
 
     const item = assignments[store][index]
@@ -232,10 +243,10 @@ export default function ShoppingClient({
     return groups
   }
 
-  const uncheckedCount = (store: StoreName) =>
-    assignments?.[store].filter((i) => !i.checked).length ?? 0
+  const uncheckedCount = (store: string) =>
+    assignments?.[store]?.filter((i) => !i.checked).length ?? 0
 
-  const totalCount = (store: StoreName) => assignments?.[store].length ?? 0
+  const totalCount = (store: string) => assignments?.[store]?.length ?? 0
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -254,6 +265,13 @@ export default function ShoppingClient({
               <p className="text-xs text-gray-400">{formatWeekLabel()}</p>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/shopping/stores"
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 text-sm"
+                aria-label="Manage stores"
+              >
+                ⚙
+              </Link>
               {listId && (
                 <button
                   onClick={() => setAddSheetOpen(true)}
@@ -319,24 +337,24 @@ export default function ShoppingClient({
         <>
           {/* Store tabs */}
           <div className="sticky top-[73px] z-10 bg-white border-b border-gray-200">
-            <div className="max-w-lg mx-auto flex">
-              {STORES.map((store) => {
-                const remaining = uncheckedCount(store)
-                const total = totalCount(store)
+            <div className="max-w-lg mx-auto flex overflow-x-auto">
+              {stores.map((store) => {
+                const remaining = uncheckedCount(store.name)
+                const total = totalCount(store.name)
                 return (
                   <button
-                    key={store}
-                    onClick={() => setActiveStore(store)}
-                    className={`flex-1 py-3 text-xs font-medium transition-colors border-b-2 ${
-                      activeStore === store
+                    key={store.id}
+                    onClick={() => setActiveStore(store.name)}
+                    className={`flex-shrink-0 px-4 py-3 text-xs font-medium transition-colors border-b-2 ${
+                      activeStore === store.name
                         ? 'border-green-600 text-green-700'
                         : 'border-transparent text-gray-500'
                     }`}
                   >
-                    <span className="block truncate px-1">{store}</span>
+                    <span className="block">{store.abbreviation}</span>
                     {total > 0 && (
                       <span className={`text-xs ${remaining === 0 ? 'text-green-500' : 'text-gray-400'}`}>
-                        {remaining === 0 ? '✓ done' : `${remaining}/${total}`}
+                        {remaining === 0 ? '✓' : `${remaining}/${total}`}
                       </span>
                     )}
                   </button>
@@ -559,18 +577,18 @@ export default function ShoppingClient({
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                 Store
               </label>
-              <div className="flex gap-2 mt-1.5">
-                {STORES.map((store) => (
+              <div className="flex gap-2 mt-1.5 flex-wrap">
+                {stores.map((store) => (
                   <button
-                    key={store}
-                    onClick={() => setNewItemStore(store)}
-                    className={`flex-1 py-2 text-xs font-medium rounded-xl border transition-colors ${
-                      newItemStore === store
+                    key={store.id}
+                    onClick={() => setNewItemStore(store.name)}
+                    className={`px-3 py-2 text-xs font-medium rounded-xl border transition-colors ${
+                      newItemStore === store.name
                         ? 'bg-green-600 text-white border-green-600'
                         : 'bg-gray-100 text-gray-600 border-transparent'
                     }`}
                   >
-                    {store === 'Whole Foods' ? 'WF' : store === "Sam's Club" ? "Sam's" : "TJ's"}
+                    {store.abbreviation}
                   </button>
                 ))}
               </div>
