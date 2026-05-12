@@ -218,7 +218,7 @@ export default function ShoppingClient({
     const updatedManualItems = [...manualItems, newManualItem]
     const updatedAssignments: StoreAssignments = {
       ...assignments,
-      [newItemStore]: [...assignments[newItemStore], newShoppingItem],
+      [newItemStore]: [...(assignments[newItemStore] ?? []), newShoppingItem],
     }
 
     setManualItems(updatedManualItems)
@@ -365,13 +365,13 @@ export default function ShoppingClient({
 
           {/* Items */}
           <div className="max-w-lg mx-auto px-4 py-4">
-            {assignments[activeStore].length === 0 ? (
+            {(assignments[activeStore] ?? []).length === 0 ? (
               <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
             ) : (
               (() => {
-                const groups = groupByCategory(assignments[activeStore])
+                const groups = groupByCategory(assignments[activeStore] ?? [])
                 const globalIdxMap = new Map<ShoppingItem, number>(
-                  assignments[activeStore].map((item, i) => [item, i])
+                  (assignments[activeStore] ?? []).map((item, i) => [item, i])
                 )
                 return (
                   <div className="space-y-4">
