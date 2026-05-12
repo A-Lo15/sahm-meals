@@ -166,7 +166,7 @@ export interface ManualItem {
 
 export type StoreAssignments = Record<string, ShoppingItem[]>
 
-const CATEGORY_ORDER: IngredientCategory[] = [
+export const CATEGORY_ORDER: IngredientCategory[] = [
   'produce', 'meat', 'dairy', 'pantry', 'frozen', 'household', 'other', '',
 ]
 
@@ -190,7 +190,11 @@ interface AggEntry {
   category: IngredientCategory
 }
 
-export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
+export function buildStoreAssignments(
+  slots: RawSlot[],
+  storeNames: string[],
+  priorRouteMap: Map<string, string>
+): StoreAssignments {
   const agg = new Map<string, AggEntry>()
 
   for (const slot of slots) {
@@ -229,10 +233,9 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
     }
   }
 
-  const result: StoreAssignments = {
-    'Whole Foods': [],
-    "Sam's Club": [],
-    "Trader Joe's": [],
+  const result: StoreAssignments = {}
+  for (const name of storeNames) {
+    result[name] = []
   }
 
   for (const [key, { canonical, family, unit, category }] of Array.from(agg.entries())) {
@@ -255,12 +258,21 @@ export function buildStoreAssignments(slots: RawSlot[]): StoreAssignments {
       displayUnit = unit
     }
 
-    const store = STORE_FOR_CATEGORY[category] ?? "Trader Joe's"
+    const categoryDefault = STORE_FOR_CATEGORY[category]
+    let store: string
+    if (priorRouteMap.has(rawName) && storeNames.includes(priorRouteMap.get(rawName)!)) {
+      store = priorRouteMap.get(rawName)!
+    } else if (categoryDefault && storeNames.includes(categoryDefault)) {
+      store = categoryDefault
+    } else {
+      store = storeNames[0] ?? ''
+    }
+    if (!store) continue
     result[store].push({ name, quantity: formatQty(displayQty), unit: displayUnit, category, checked: false })
   }
 
-  for (const storeName of Object.keys(result)) {
-    result[storeName].sort((a, b) => {
+  for (const storeName of storeNames) {
+    result[storeName]?.sort((a, b) => {
       const ci = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
       return ci !== 0 ? ci : a.name.localeCompare(b.name)
     })

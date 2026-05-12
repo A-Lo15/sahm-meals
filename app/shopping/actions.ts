@@ -69,16 +69,31 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
     .select(`servings_override, recipe:recipes(default_servings, ingredients)`)
     .eq('meal_plan_id', plan.id)
 
-  const storeAssignments = buildStoreAssignments(
-    (slots ?? []) as unknown as Parameters<typeof buildStoreAssignments>[0]
-  )
-
   // Load existing manual items and their prior checked states
   const { data: existingList } = await db
     .from('shopping_lists')
     .select('manual_overrides, store_assignments')
     .eq('meal_plan_id', plan.id)
     .single()
+
+  // Build prior route map: normalizedName → storeName for non-manual items
+  const priorRouteMap = new Map<string, string>()
+  if (existingList?.store_assignments) {
+    const prior = existingList.store_assignments as StoreAssignments
+    for (const [storeName, items] of Object.entries(prior)) {
+      for (const item of (items as ShoppingItem[])) {
+        if (!item.manual) {
+          priorRouteMap.set(item.name.toLowerCase(), storeName)
+        }
+      }
+    }
+  }
+
+  const storeAssignments = buildStoreAssignments(
+    (slots ?? []) as unknown as Parameters<typeof buildStoreAssignments>[0],
+    stores.map(s => s.name),
+    priorRouteMap
+  )
 
   const manualItems: ManualItem[] =
     (existingList?.manual_overrides as { added?: ManualItem[] } | null)?.added ?? []
