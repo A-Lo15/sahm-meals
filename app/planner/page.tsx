@@ -48,7 +48,7 @@ export default async function PlannerPage({
       .from('meal_plan_recipes')
       .select(
         `id, meal_plan_id, recipe_id, day_of_week, servings_override, position,
-         recipe:recipes(id, title, default_servings, source_image_url, state)`
+         recipe:recipes(id, title, default_servings, source_image_url, state, in_library)`
       )
       .eq('meal_plan_id', mealPlanId)
       .order('position'),
@@ -57,6 +57,7 @@ export default async function PlannerPage({
       .from('recipes')
       .select('id, title, default_servings, source_image_url, state')
       .eq('household_id', householdId)
+      .eq('in_library', true)
       .order('title'),
   ])
 
