@@ -18,6 +18,13 @@ export interface Ingredient {
   notes: string
 }
 
+export interface CustomMealInput {
+  title: string
+  servings: number
+  ingredients: Ingredient[]
+  saveToLibrary: boolean
+}
+
 export interface MealPlan {
   id: string
   household_id: string
@@ -38,6 +45,7 @@ export interface SlotWithRecipe {
     default_servings: number
     source_image_url: string | null
     state: RecipeState
+    in_library: boolean
   }
 }
 
@@ -61,6 +69,7 @@ export interface Recipe {
   instructions: string | null
   original_parsed_json: Record<string, unknown> | null
   state: RecipeState
+  in_library: boolean
   last_cooked_at: string | null
   times_cooked: number
   created_at: string

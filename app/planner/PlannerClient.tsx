@@ -77,6 +77,7 @@ export default function PlannerClient({
         default_servings: recipe.default_servings,
         source_image_url: recipe.source_image_url,
         state: recipe.state,
+        in_library: true,
       },
       optimistic: true,
     }
@@ -171,6 +172,7 @@ export default function PlannerClient({
         default_servings: editedRecipe.default_servings,
         source_image_url: editedRecipe.source_image_url,
         state: 'tried',
+        in_library: true,
       },
       optimistic: true,
     }
