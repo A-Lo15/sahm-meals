@@ -102,6 +102,7 @@ export default function PlannerClient({
   }
 
   function handleRemove(slot: OptimisticSlot) {
+    if (slot.optimistic) return
     setSlots((prev) => prev.filter((s) => s.id !== slot.id))
     if (!slot.recipe.in_library && slot.recipe_id) {
       startTransition(() => removeSlotAndRecipe(slot.id, slot.recipe_id))
