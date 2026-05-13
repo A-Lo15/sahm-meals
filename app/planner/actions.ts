@@ -247,9 +247,13 @@ export async function createCustomMeal(
 }
 
 export async function removeSlotAndRecipe(slotId: string, recipeId: string): Promise<void> {
-  const { db } = await getContext()
+  const { db, householdId } = await getContext()
 
-  await db.from('meal_plan_recipes').delete().eq('id', slotId)
+  const { error: slotDeleteError } = await db
+    .from('meal_plan_recipes')
+    .delete()
+    .eq('id', slotId)
+  if (slotDeleteError) throw slotDeleteError
 
   const { data: remainingSlots, error: slotsError } = await db
     .from('meal_plan_recipes')
@@ -259,7 +263,7 @@ export async function removeSlotAndRecipe(slotId: string, recipeId: string): Pro
   if (slotsError) throw slotsError
 
   if (!remainingSlots || remainingSlots.length === 0) {
-    await db.from('recipes').delete().eq('id', recipeId)
+    await db.from('recipes').delete().eq('id', recipeId).eq('household_id', householdId)
   }
 
   revalidatePath('/planner')
