@@ -6,12 +6,15 @@ import Link from 'next/link'
 import {
   addRecipeToDay,
   removeSlot,
+  removeSlotAndRecipe,
   updateSlotServings,
   importAndAddToDay,
+  createCustomMeal,
 } from './actions'
-import type { SlotWithRecipe, RecipeOption } from '@/lib/types'
+import type { SlotWithRecipe, RecipeOption, CustomMealInput } from '@/lib/types'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
 import ImportReviewModal from './ImportReviewModal'
+import CustomMealSheet from './CustomMealSheet'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -36,6 +39,7 @@ export default function PlannerClient({
   const [slots, setSlots] = useState<OptimisticSlot[]>(initialSlots)
   const [, startTransition] = useTransition()
   const [pickerDay, setPickerDay] = useState<number | null>(null)
+  const [customDay, setCustomDay] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
   const [importing, setImporting] = useState(false)
@@ -97,9 +101,57 @@ export default function PlannerClient({
     })
   }
 
-  function handleRemove(slotId: string) {
-    setSlots((prev) => prev.filter((s) => s.id !== slotId))
-    startTransition(() => removeSlot(slotId))
+  function handleRemove(slot: OptimisticSlot) {
+    setSlots((prev) => prev.filter((s) => s.id !== slot.id))
+    if (!slot.recipe.in_library && slot.recipe_id) {
+      startTransition(() => removeSlotAndRecipe(slot.id, slot.recipe_id))
+    } else {
+      startTransition(() => removeSlot(slot.id))
+    }
+  }
+
+  function handleCustomMeal(dayOfWeek: number, input: CustomMealInput) {
+    const tempId = `temp-${Date.now()}`
+    const optimisticSlot: OptimisticSlot = {
+      id: tempId,
+      meal_plan_id: mealPlanId,
+      recipe_id: '',
+      day_of_week: dayOfWeek,
+      servings_override: null,
+      position: slots.filter((s) => s.day_of_week === dayOfWeek).length,
+      recipe: {
+        id: '',
+        title: input.title,
+        default_servings: input.servings,
+        source_image_url: null,
+        state: 'saved',
+        in_library: input.saveToLibrary,
+      },
+      optimistic: true,
+    }
+    setSlots((prev) => [...prev, optimisticSlot])
+    setCustomDay(null)
+
+    startTransition(async () => {
+      try {
+        const slot = await createCustomMeal(mealPlanId, dayOfWeek, input)
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === tempId
+              ? {
+                  ...s,
+                  id: slot.id,
+                  recipe_id: slot.recipe_id,
+                  recipe: { ...slot.recipe },
+                  optimistic: false,
+                }
+              : s
+          )
+        )
+      } catch {
+        setSlots((prev) => prev.filter((s) => s.id !== tempId))
+      }
+    })
   }
 
   function handleServingsChange(slotId: string, value: number) {
@@ -292,13 +344,22 @@ export default function PlannerClient({
                     {dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                 </div>
-                <button
-                  onClick={() => setPickerDay(i)}
-                  className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-lg leading-none"
-                  aria-label={`Add recipe to ${dayName}`}
-                >
-                  +
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPickerDay(i)}
+                    className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-xs font-medium"
+                    aria-label={`Add recipe to ${dayName} from library`}
+                  >
+                    + Library
+                  </button>
+                  <button
+                    onClick={() => setCustomDay(i)}
+                    className="px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-xs font-medium"
+                    aria-label={`Add custom meal to ${dayName}`}
+                  >
+                    + Custom
+                  </button>
+                </div>
               </div>
 
               {/* Slots */}
@@ -322,7 +383,7 @@ export default function PlannerClient({
                           />
                         ) : (
                           <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-lg">
-                            🍽
+                            {slot.recipe.in_library ? '🍽' : '✏️'}
                           </div>
                         )}
 
@@ -352,7 +413,7 @@ export default function PlannerClient({
                         </div>
 
                         <button
-                          onClick={() => handleRemove(slot.id)}
+                          onClick={() => handleRemove(slot)}
                           className="w-8 h-8 flex items-center justify-center text-gray-300 text-base flex-shrink-0"
                           aria-label="Remove"
                         >
@@ -380,6 +441,13 @@ export default function PlannerClient({
           day={pendingImport.day}
           onConfirm={handleConfirmImport}
           onDismiss={handleDismissImport}
+        />
+      )}
+      {customDay !== null && (
+        <CustomMealSheet
+          dayOfWeek={customDay}
+          onClose={() => setCustomDay(null)}
+          onSave={(input) => handleCustomMeal(customDay, input)}
         />
       )}
 
