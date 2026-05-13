@@ -60,7 +60,7 @@ export default async function RecipesPage({
 
         const ids = (slots ?? []).map((s: { recipe_id: string }) => s.recipe_id)
         if (ids.length > 0) {
-          const { data } = await db.from('recipes').select('*').in('id', ids)
+          const { data } = await db.from('recipes').select('*').in('id', ids).eq('in_library', true)
           recipes = (data as Recipe[]) ?? []
         }
       }
@@ -69,6 +69,7 @@ export default async function RecipesPage({
         .from('recipes')
         .select('*')
         .eq('household_id', householdId)
+        .eq('in_library', true)
         .order('updated_at', { ascending: false })
       recipes = (data as Recipe[]) ?? []
     } else {
@@ -76,6 +77,7 @@ export default async function RecipesPage({
         .from('recipes')
         .select('*')
         .eq('household_id', householdId)
+        .eq('in_library', true)
         .in('state', ['saved', 'favorited'])
         .order('updated_at', { ascending: false })
       recipes = (data as Recipe[]) ?? []
