@@ -9,10 +9,11 @@ const CATEGORIES: IngredientCategory[] = [
 ]
 
 interface IngredientRow {
+  id: string
   qty: string
   unit: string
   name: string
-  category: IngredientCategory | ''
+  category: IngredientCategory
 }
 
 interface Props {
@@ -26,11 +27,11 @@ export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
   const [servings, setServings] = useState(4)
   const [saveToLibrary, setSaveToLibrary] = useState(false)
   const [rows, setRows] = useState<IngredientRow[]>([
-    { qty: '', unit: '', name: '', category: '' },
+    { id: crypto.randomUUID(), qty: '', unit: '', name: '', category: '' },
   ])
 
   function addRow() {
-    setRows((prev) => [...prev, { qty: '', unit: '', name: '', category: '' }])
+    setRows((prev) => [...prev, { id: crypto.randomUUID(), qty: '', unit: '', name: '', category: '' }])
   }
 
   function updateRow(index: number, field: keyof IngredientRow, value: string) {
@@ -114,7 +115,7 @@ export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
           </div>
           <div className="space-y-1.5 mb-2">
             {rows.map((row, i) => (
-              <div key={i} className="flex gap-1">
+              <div key={row.id} className="flex gap-1">
                 <input
                   type="text"
                   value={row.qty}
@@ -139,7 +140,7 @@ export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
                 <select
                   value={row.category}
                   onChange={(e) =>
-                    updateRow(i, 'category', e.target.value as IngredientCategory | '')
+                    updateRow(i, 'category', e.target.value as IngredientCategory)
                   }
                   className="w-20 px-1 py-2 bg-gray-100 rounded-lg text-xs focus:outline-none"
                 >
