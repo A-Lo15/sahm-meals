@@ -222,7 +222,8 @@ export async function createCustomMeal(
     .single()
 
   if (slotError) {
-    await db.from('recipes').delete().eq('id', recipe.id)
+    const { error: deleteError } = await db.from('recipes').delete().eq('id', recipe.id)
+    if (deleteError) console.error('Failed to clean up orphaned recipe', recipe.id, deleteError)
     throw slotError
   }
 
@@ -248,15 +249,16 @@ export async function createCustomMeal(
 export async function removeSlotAndRecipe(slotId: string, recipeId: string): Promise<void> {
   const { db } = await getContext()
 
-  const { data: otherSlots } = await db
+  await db.from('meal_plan_recipes').delete().eq('id', slotId)
+
+  const { data: remainingSlots, error: slotsError } = await db
     .from('meal_plan_recipes')
     .select('id')
     .eq('recipe_id', recipeId)
-    .neq('id', slotId)
 
-  await db.from('meal_plan_recipes').delete().eq('id', slotId)
+  if (slotsError) throw slotsError
 
-  if (!otherSlots || otherSlots.length === 0) {
+  if (!remainingSlots || remainingSlots.length === 0) {
     await db.from('recipes').delete().eq('id', recipeId)
   }
 
