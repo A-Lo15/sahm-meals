@@ -184,7 +184,7 @@ export default function PlannerClient({
       setSlots((prev) =>
         prev.map((s) =>
           s.id === slot.id
-            ? { ...s, recipe: { ...s.recipe, ...input, in_library: false } }
+            ? { ...s, recipe: { ...s.recipe, title: input.title, default_servings: input.servings, ingredients: input.ingredients, instructions: input.instructions, in_library: false }, optimistic: true }
             : s
         )
       )
@@ -196,7 +196,7 @@ export default function PlannerClient({
           )
         } catch {
           setSlots((prev) =>
-            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe } } : s))
+            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe }, optimistic: false } : s))
           )
         }
       })
