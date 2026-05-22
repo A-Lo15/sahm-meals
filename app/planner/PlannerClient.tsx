@@ -482,7 +482,7 @@ export default function PlannerClient({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search recipes…"
+                placeholder="Search recipes or paste recipe URL…"
                 autoFocus
                 className="w-full px-4 py-2.5 bg-gray-100 rounded-xl text-base focus:outline-none"
               />
