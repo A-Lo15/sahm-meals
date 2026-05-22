@@ -325,7 +325,7 @@ export async function updateRecipe(
 ): Promise<void> {
   const { db, householdId } = await getContext()
 
-  const { error, count } = await db
+  const { data, error } = await db
     .from('recipes')
     .update({
       title: input.title,
@@ -335,9 +335,10 @@ export async function updateRecipe(
     })
     .eq('id', recipeId)
     .eq('household_id', householdId)
+    .select('id')
 
   if (error) throw error
-  if (!count) throw new Error('Recipe not found or access denied')
+  if (!data || data.length === 0) throw new Error('Recipe not found or access denied')
 
   revalidatePath('/planner')
   revalidatePath('/recipes')

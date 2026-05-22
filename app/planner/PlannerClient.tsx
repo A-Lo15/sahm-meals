@@ -46,6 +46,7 @@ export default function PlannerClient({
   const [customDay, setCustomDay] = useState<number | null>(null)
   const [editSlot, setEditSlot] = useState<OptimisticSlot | null>(null)
   const [editScope, setEditScope] = useState<'week' | 'library' | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
   const [importing, setImporting] = useState(false)
@@ -190,31 +191,43 @@ export default function PlannerClient({
       )
       startTransition(async () => {
         try {
-          const updated = await forkSlotRecipe(slot.id, slot.recipe_id, input)
-          setSlots((prev) =>
-            prev.map((s) => (s.id === slot.id ? { ...updated, optimistic: false } : s))
-          )
+          if (slot.recipe.in_library) {
+            const updated = await forkSlotRecipe(slot.id, slot.recipe_id, input)
+            setSlots((prev) =>
+              prev.map((s) => (s.id === slot.id ? { ...updated, optimistic: false } : s))
+            )
+          } else {
+            await updateRecipe(slot.recipe_id, input)
+            setSlots((prev) =>
+              prev.map((s) => (s.id === slot.id ? { ...s, optimistic: false } : s))
+            )
+          }
         } catch {
           setSlots((prev) =>
             prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe }, optimistic: false } : s))
           )
+          setSaveError('Failed to save changes. Please try again.')
         }
       })
     } else {
       setSlots((prev) =>
         prev.map((s) =>
           s.id === slot.id
-            ? { ...s, recipe: { ...s.recipe, title: input.title, default_servings: input.servings, ingredients: input.ingredients, instructions: input.instructions } }
+            ? { ...s, recipe: { ...s.recipe, title: input.title, default_servings: input.servings, ingredients: input.ingredients, instructions: input.instructions }, optimistic: true }
             : s
         )
       )
       startTransition(async () => {
         try {
           await updateRecipe(slot.recipe_id, input)
+          setSlots((prev) =>
+            prev.map((s) => (s.id === slot.id ? { ...s, optimistic: false } : s))
+          )
         } catch {
           setSlots((prev) =>
-            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe } } : s))
+            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe }, optimistic: false } : s))
           )
+          setSaveError('Failed to save changes. Please try again.')
         }
       })
     }
@@ -498,6 +511,13 @@ export default function PlannerClient({
           )
         })}
       </div>
+
+      {saveError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-xl shadow-md flex items-center gap-3 max-w-sm w-full mx-4">
+          <span className="flex-1">{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="text-red-400 text-base leading-none flex-shrink-0">✕</button>
+        </div>
+      )}
 
       {pendingImport !== null && (
         <ImportReviewModal
