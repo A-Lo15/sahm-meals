@@ -10,11 +10,15 @@ import {
   updateSlotServings,
   importAndAddToDay,
   createCustomMeal,
+  forkSlotRecipe,
+  updateRecipe,
 } from './actions'
-import type { SlotWithRecipe, RecipeOption, CustomMealInput } from '@/lib/types'
+import type { SlotWithRecipe, RecipeOption, CustomMealInput, RecipeEditInput } from '@/lib/types'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
 import ImportReviewModal from './ImportReviewModal'
 import CustomMealSheet from './CustomMealSheet'
+import RecipeScopeSheet from './RecipeScopeSheet'
+import RecipeEditSheet from './RecipeEditSheet'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -40,6 +44,8 @@ export default function PlannerClient({
   const [, startTransition] = useTransition()
   const [pickerDay, setPickerDay] = useState<number | null>(null)
   const [customDay, setCustomDay] = useState<number | null>(null)
+  const [editSlot, setEditSlot] = useState<OptimisticSlot | null>(null)
+  const [editScope, setEditScope] = useState<'week' | 'library' | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
   const [importing, setImporting] = useState(false)
@@ -82,6 +88,8 @@ export default function PlannerClient({
         source_image_url: recipe.source_image_url,
         state: recipe.state,
         in_library: true,
+        ingredients: [],
+        instructions: null,
       },
       optimistic: true,
     }
@@ -127,6 +135,8 @@ export default function PlannerClient({
         source_image_url: null,
         state: 'saved',
         in_library: input.saveToLibrary,
+        ingredients: input.ingredients,
+        instructions: null,
       },
       optimistic: true,
     }
@@ -161,6 +171,53 @@ export default function PlannerClient({
     )
     // Call directly — not inside startTransition, which React can cancel on navigation
     void updateSlotServings(slotId, value)
+  }
+
+  function handleEditSave(input: RecipeEditInput) {
+    if (!editSlot) return
+    const scope = editScope ?? 'week'
+    const slot = editSlot
+    setEditSlot(null)
+    setEditScope(null)
+
+    if (scope === 'week') {
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? { ...s, recipe: { ...s.recipe, ...input, in_library: false } }
+            : s
+        )
+      )
+      startTransition(async () => {
+        try {
+          const updated = await forkSlotRecipe(slot.id, slot.recipe_id, input)
+          setSlots((prev) =>
+            prev.map((s) => (s.id === slot.id ? { ...updated, optimistic: false } : s))
+          )
+        } catch {
+          setSlots((prev) =>
+            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe } } : s))
+          )
+        }
+      })
+    } else {
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? { ...s, recipe: { ...s.recipe, title: input.title, default_servings: input.servings, ingredients: input.ingredients, instructions: input.instructions } }
+            : s
+        )
+      )
+      startTransition(async () => {
+        try {
+          await updateRecipe(slot.recipe_id, input)
+        } catch {
+          setSlots((prev) =>
+            prev.map((s) => (s.id === slot.id ? { ...s, recipe: { ...slot.recipe } } : s))
+          )
+        }
+      })
+    }
   }
 
   async function handleImport() {
@@ -226,6 +283,8 @@ export default function PlannerClient({
         source_image_url: editedRecipe.source_image_url,
         state: 'tried',
         in_library: true,
+        ingredients: editedRecipe.ingredients ?? [],
+        instructions: editedRecipe.instructions ?? null,
       },
       optimistic: true,
     }
@@ -389,9 +448,13 @@ export default function PlannerClient({
                         )}
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <button
+                            onClick={() => { if (!slot.optimistic) setEditSlot(slot) }}
+                            disabled={!!slot.optimistic}
+                            className="text-sm font-medium text-gray-900 truncate text-left w-full underline decoration-dotted decoration-gray-300 underline-offset-2 disabled:no-underline"
+                          >
                             {slot.recipe.title}
-                          </p>
+                          </button>
                           <div className="flex items-center gap-1 mt-0.5">
                             <button
                               onClick={() =>
@@ -449,6 +512,27 @@ export default function PlannerClient({
           dayOfWeek={customDay}
           onClose={() => setCustomDay(null)}
           onSave={(input) => handleCustomMeal(customDay, input)}
+        />
+      )}
+      {editSlot && !editScope && editSlot.recipe.in_library && (
+        <RecipeScopeSheet
+          recipeName={editSlot.recipe.title}
+          onSelectScope={setEditScope}
+          onClose={() => setEditSlot(null)}
+        />
+      )}
+      {editSlot && (editScope !== null || !editSlot.recipe.in_library) && (
+        <RecipeEditSheet
+          scope={editScope ?? 'week'}
+          initialValues={{
+            title: editSlot.recipe.title,
+            servings: editSlot.recipe.default_servings,
+            ingredients: editSlot.recipe.ingredients,
+            instructions: editSlot.recipe.instructions,
+          }}
+          dayOfWeek={editSlot.day_of_week}
+          onSave={handleEditSave}
+          onClose={() => { setEditSlot(null); setEditScope(null) }}
         />
       )}
 
