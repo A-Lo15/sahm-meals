@@ -18,6 +18,7 @@ interface IngredientRow {
 interface Props {
   scope: 'week' | 'library'
   initialValues: RecipeEditInput
+  dayOfWeek: number
   onSave: (input: RecipeEditInput) => void
   onClose: () => void
 }
@@ -32,7 +33,8 @@ function toRow(ing: Ingredient): IngredientRow {
   }
 }
 
-export default function RecipeEditSheet({ scope, initialValues, onSave, onClose }: Props) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function RecipeEditSheet({ scope, initialValues, dayOfWeek, onSave, onClose }: Props) {
   const [title, setTitle] = useState(initialValues.title)
   const [servings, setServings] = useState(initialValues.servings)
   const [instructions, setInstructions] = useState(initialValues.instructions ?? '')
