@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { ParsedRecipe } from '@/lib/parseRecipe'
-import type { CustomMealInput, SlotWithRecipe } from '@/lib/types'
+import type { CustomMealInput, RecipeEditInput, SlotWithRecipe } from '@/lib/types'
 
 async function getContext() {
   const supabase = await createClient()
@@ -242,8 +242,92 @@ export async function createCustomMeal(
       source_image_url: null,
       state: 'saved',
       in_library: input.saveToLibrary,
+      ingredients: input.ingredients,
+      instructions: null,
     },
   }
+}
+
+export async function forkSlotRecipe(
+  slotId: string,
+  recipeId: string,
+  input: RecipeEditInput
+): Promise<SlotWithRecipe> {
+  const { db, householdId } = await getContext()
+
+  const { data: original } = await db
+    .from('recipes')
+    .select('source_image_url')
+    .eq('id', recipeId)
+    .eq('household_id', householdId)
+    .single()
+  if (!original) throw new Error('Recipe not found or access denied')
+
+  const { data: copy, error: copyError } = await db
+    .from('recipes')
+    .insert({
+      household_id: householdId,
+      title: input.title,
+      description: null,
+      default_servings: input.servings,
+      source_url: null,
+      source_image_url: original.source_image_url,
+      ingredients: input.ingredients,
+      instructions: input.instructions,
+      original_parsed_json: null,
+      state: 'saved',
+      in_library: false,
+    })
+    .select('id')
+    .single()
+  if (copyError) throw copyError
+
+  const { error: slotError } = await db
+    .from('meal_plan_recipes')
+    .update({ recipe_id: copy.id })
+    .eq('id', slotId)
+
+  if (slotError) {
+    const { error: deleteError } = await db.from('recipes').delete().eq('id', copy.id)
+    if (deleteError) console.error('Failed to clean up orphaned recipe copy', copy.id, deleteError)
+    throw slotError
+  }
+
+  const { data: slot, error: fetchError } = await db
+    .from('meal_plan_recipes')
+    .select(
+      `id, meal_plan_id, recipe_id, day_of_week, servings_override, position,
+       recipe:recipes(id, title, default_servings, source_image_url, state, in_library, ingredients, instructions)`
+    )
+    .eq('id', slotId)
+    .single()
+  if (fetchError) throw fetchError
+
+  revalidatePath('/planner')
+  return slot as unknown as SlotWithRecipe
+}
+
+export async function updateRecipe(
+  recipeId: string,
+  input: RecipeEditInput
+): Promise<void> {
+  const { db, householdId } = await getContext()
+
+  const { error } = await db
+    .from('recipes')
+    .update({
+      title: input.title,
+      default_servings: input.servings,
+      ingredients: input.ingredients,
+      instructions: input.instructions,
+    })
+    .eq('id', recipeId)
+    .eq('household_id', householdId)
+
+  if (error) throw error
+
+  revalidatePath('/planner')
+  revalidatePath('/recipes')
 }
 
 export async function removeSlotAndRecipe(slotId: string, recipeId: string): Promise<void> {
