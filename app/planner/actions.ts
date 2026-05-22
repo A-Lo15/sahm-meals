@@ -282,6 +282,18 @@ export async function forkSlotRecipe(
     .single()
   if (copyError) throw copyError
 
+  const { data: slotCheck } = await db
+    .from('meal_plan_recipes')
+    .select('id, meal_plans!inner(household_id)')
+    .eq('id', slotId)
+    .eq('meal_plans.household_id', householdId)
+    .single()
+  if (!slotCheck) {
+    const { error: deleteError } = await db.from('recipes').delete().eq('id', copy.id)
+    if (deleteError) console.error('Failed to clean up orphaned recipe copy', copy.id, deleteError)
+    throw new Error('Slot not found or access denied')
+  }
+
   const { error: slotError } = await db
     .from('meal_plan_recipes')
     .update({ recipe_id: copy.id })
@@ -313,7 +325,7 @@ export async function updateRecipe(
 ): Promise<void> {
   const { db, householdId } = await getContext()
 
-  const { error } = await db
+  const { error, count } = await db
     .from('recipes')
     .update({
       title: input.title,
@@ -325,6 +337,7 @@ export async function updateRecipe(
     .eq('household_id', householdId)
 
   if (error) throw error
+  if (!count) throw new Error('Recipe not found or access denied')
 
   revalidatePath('/planner')
   revalidatePath('/recipes')
