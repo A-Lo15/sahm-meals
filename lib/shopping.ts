@@ -21,7 +21,7 @@ function parseQty(s: string): number {
   return isNaN(n) ? 0 : n
 }
 
-function formatQty(n: number): string {
+export function formatQty(n: number): string {
   if (n === 0) return ''
   const fracs: [number, string][] = [
     [0.25, '¼'], [0.5, '½'], [0.75, '¾'],
@@ -107,13 +107,13 @@ const TO_GRAMS: Record<string, number> = {
   pound: 453.592,
 }
 
-function volumeFromCanonical(tbsp: number): { qty: number; unit: string } {
+export function volumeFromCanonical(tbsp: number): { qty: number; unit: string } {
   if (tbsp >= 16) return { qty: tbsp / 16, unit: 'cup' }
   if (tbsp >= 1) return { qty: tbsp, unit: 'tablespoon' }
   return { qty: tbsp * 3, unit: 'teaspoon' }
 }
 
-function weightFromCanonical(grams: number): { qty: number; unit: string } {
+export function weightFromCanonical(grams: number): { qty: number; unit: string } {
   if (grams >= 453.592) return { qty: grams / 453.592, unit: 'pound' }
   if (grams >= 28.3495) return { qty: grams / 28.3495, unit: 'ounce' }
   return { qty: grams, unit: 'gram' }
@@ -164,6 +164,23 @@ export interface ManualItem {
   unit: string     // empty string if not provided by user
 }
 
+export interface UnitPreference {
+  preferredUnit: string            // e.g. "clove" or "tablespoon"
+  preferredFamily: 'other' | 'volume' | 'weight'
+  factor: number | null            // tbsp per count (volume) or grams per count (weight); null = unknown
+}
+
+export type UnitPreferences = Record<string, UnitPreference>
+
+export interface ConflictItem {
+  normalizedName: string           // e.g. "garlic"
+  displayName: string              // e.g. "Garlic"
+  options: [
+    { family: 'other'; unit: string; canonicalQty: number },
+    { family: 'volume' | 'weight'; unit: string; canonicalQty: number },
+  ]
+}
+
 export type StoreAssignments = Record<string, ShoppingItem[]>
 
 export const CATEGORY_ORDER: IngredientCategory[] = [
@@ -193,8 +210,9 @@ interface AggEntry {
 export function buildStoreAssignments(
   slots: RawSlot[],
   storeNames: string[],
-  priorRouteMap: Map<string, string>
-): StoreAssignments {
+  priorRouteMap: Map<string, string>,
+  unitPreferences: UnitPreferences = {}
+): { assignments: StoreAssignments; conflicts: ConflictItem[] } {
   const agg = new Map<string, AggEntry>()
 
   for (const slot of slots) {
@@ -230,6 +248,56 @@ export function buildStoreAssignments(
       } else {
         agg.set(key, { canonical, family, unit: normalizedUnit, category: ing.category ?? '' })
       }
+    }
+  }
+
+  // ── Cross-family conflict detection ─────────────────────────────────────────
+
+  const conflicts: ConflictItem[] = []
+
+  // Group agg keys by normalized ingredient name
+  const nameToKeys = new Map<string, string[]>()
+  for (const key of Array.from(agg.keys())) {
+    const name = key.split('|||')[0]
+    if (!nameToKeys.has(name)) nameToKeys.set(name, [])
+    nameToKeys.get(name)!.push(key)
+  }
+
+  for (const [name, keys] of Array.from(nameToKeys.entries())) {
+    if (keys.length <= 1) continue
+
+    const otherKey = keys.find(k => agg.get(k)!.family === 'other')
+    const measureKey = keys.find(k => {
+      const f = agg.get(k)!.family
+      return f === 'volume' || f === 'weight'
+    })
+    if (!otherKey || !measureKey) continue
+
+    const otherEntry = agg.get(otherKey)!
+    const measureEntry = agg.get(measureKey)!
+    const measureFamily = measureEntry.family as 'volume' | 'weight'
+
+    const pref = unitPreferences[name]
+
+    if (pref?.factor != null) {
+      // Resolve inline: convert minority family into preferred family and merge
+      if (pref.preferredFamily === 'other') {
+        otherEntry.canonical += measureEntry.canonical / pref.factor
+        agg.delete(measureKey)
+      } else {
+        measureEntry.canonical += otherEntry.canonical * pref.factor
+        agg.delete(otherKey)
+      }
+    } else {
+      // No stored preference or factor — surface as a conflict for the UI
+      conflicts.push({
+        normalizedName: name,
+        displayName: name.charAt(0).toUpperCase() + name.slice(1),
+        options: [
+          { family: 'other', unit: otherEntry.unit, canonicalQty: otherEntry.canonical },
+          { family: measureFamily, unit: measureEntry.unit, canonicalQty: measureEntry.canonical },
+        ],
+      })
     }
   }
 
@@ -279,5 +347,5 @@ export function buildStoreAssignments(
     })
   }
 
-  return result
+  return { assignments: result, conflicts }
 }
