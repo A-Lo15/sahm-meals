@@ -3,7 +3,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
-import { buildStoreAssignments, type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import {
+  buildStoreAssignments,
+  formatQty,
+  volumeFromCanonical,
+  weightFromCanonical,
+  type StoreAssignments,
+  type ShoppingItem,
+  type ManualItem,
+  type ConflictItem,
+  type UnitPreference,
+  type UnitPreferences,
+} from '@/lib/shopping'
+import Anthropic from '@anthropic-ai/sdk'
 import { type Store } from '@/lib/stores'
 
 async function getContext() {
@@ -42,6 +54,111 @@ async function loadStores(
   }))
 }
 
+async function fetchConversionSuggestions(
+  conflicts: ConflictItem[]
+): Promise<Record<string, number>> {
+  if (conflicts.length === 0) return {}
+
+  const lines = conflicts.map(c => {
+    const measureOpt = c.options[1]
+    const measureUnit = measureOpt.family === 'volume' ? 'tablespoons' : 'grams'
+    return `- ${c.displayName}: 1 ${c.options[0].unit} = ? ${measureUnit}`
+  })
+
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{
+        role: 'user',
+        content: `You are a cooking measurement expert. For each ingredient, give the conversion factor as a positive decimal number.
+Return ONLY valid JSON, no markdown. Format: {"ingredient_name": number}
+
+${lines.join('\n')}`,
+      }],
+    })
+
+    const block = response.content[0]
+    if (block.type !== 'text') return {}
+
+    const jsonMatch = block.text.match(/\{[\s\S]+\}/)
+    if (!jsonMatch) return {}
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+    const result: Record<string, number> = {}
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val !== 'number' || val <= 0) continue
+      const match = conflicts.find(
+        c =>
+          c.displayName.toLowerCase() === key.toLowerCase() ||
+          c.normalizedName === key.toLowerCase()
+      )
+      if (match) result[match.normalizedName] = val
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+function computeConflictDisplay(
+  conflict: ConflictItem,
+  factor: number | undefined
+): ResolvedConflict {
+  const [otherOpt, measureOpt] = conflict.options
+
+  if (factor) {
+    // Compute merged totals for both unit choices
+    const totalCount = otherOpt.canonicalQty + measureOpt.canonicalQty / factor
+    const totalMeasure = otherOpt.canonicalQty * factor + measureOpt.canonicalQty
+
+    const countDisplay = `${formatQty(totalCount)} ${otherOpt.unit}`
+
+    let measureDisplay: string
+    if (measureOpt.family === 'volume') {
+      const { qty, unit } = volumeFromCanonical(totalMeasure)
+      measureDisplay = `${formatQty(qty)} ${unit}`
+    } else {
+      const { qty, unit } = weightFromCanonical(totalMeasure)
+      measureDisplay = `${formatQty(qty)} ${unit}`
+    }
+
+    return {
+      normalizedName: conflict.normalizedName,
+      displayName: conflict.displayName,
+      options: [
+        { family: 'other', unit: otherOpt.unit, displayQty: countDisplay, isSuggested: true },
+        { family: measureOpt.family, unit: measureOpt.unit, displayQty: measureDisplay, isSuggested: false },
+      ],
+    }
+  }
+
+  // No factor from Claude — show raw unmerged quantities, no suggestion
+  let measureDisplay: string
+  if (measureOpt.family === 'volume') {
+    const { qty, unit } = volumeFromCanonical(measureOpt.canonicalQty)
+    measureDisplay = `${formatQty(qty)} ${unit}`
+  } else {
+    const { qty, unit } = weightFromCanonical(measureOpt.canonicalQty)
+    measureDisplay = `${formatQty(qty)} ${unit}`
+  }
+
+  return {
+    normalizedName: conflict.normalizedName,
+    displayName: conflict.displayName,
+    options: [
+      {
+        family: 'other',
+        unit: otherOpt.unit,
+        displayQty: `${formatQty(otherOpt.canonicalQty)} ${otherOpt.unit}`,
+        isSuggested: false,
+      },
+      { family: measureOpt.family, unit: measureOpt.unit, displayQty: measureDisplay, isSuggested: false },
+    ],
+  }
+}
+
 export interface ShoppingListData {
   id: string
   storeAssignments: StoreAssignments
@@ -51,8 +168,29 @@ export interface ShoppingListData {
   stores: Store[]
 }
 
-export async function generateShoppingList(weekStart: string): Promise<ShoppingListData | null> {
-  const { db, householdId } = await getContext()
+export interface ResolvedConflictOption {
+  family: 'other' | 'volume' | 'weight'
+  unit: string
+  displayQty: string    // merged total in this unit, e.g. "6 cloves" or "2 tablespoons"
+  isSuggested: boolean
+}
+
+export interface ResolvedConflict {
+  normalizedName: string
+  displayName: string
+  options: [ResolvedConflictOption, ResolvedConflictOption]
+}
+
+export type GenerateResult =
+  | ({ type: 'success' } & ShoppingListData)
+  | { type: 'conflicts'; conflicts: ResolvedConflict[]; suggestions: Record<string, number> }
+
+async function _buildAndSaveList(
+  db: ReturnType<typeof createAdminClient>,
+  householdId: string,
+  weekStart: string,
+  unitPreferences: UnitPreferences
+): Promise<ShoppingListData | null> {
   const stores = await loadStores(db, householdId)
 
   const { data: plan } = await db
@@ -69,38 +207,34 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
     .select(`servings_override, recipe:recipes(default_servings, ingredients)`)
     .eq('meal_plan_id', plan.id)
 
-  // Load existing manual items and their prior checked states
   const { data: existingList } = await db
     .from('shopping_lists')
     .select('manual_overrides, store_assignments')
     .eq('meal_plan_id', plan.id)
     .single()
 
-  // Build prior route map: normalizedName → storeName for non-manual items
   const priorRouteMap = new Map<string, string>()
   if (existingList?.store_assignments) {
     const prior = existingList.store_assignments as StoreAssignments
     for (const [storeName, items] of Object.entries(prior)) {
       for (const item of (items as ShoppingItem[])) {
         if (!item.manual && !priorRouteMap.has(item.name.toLowerCase())) {
-          // item.name is normalizeName(ing.name) + capitalize; .toLowerCase() recovers
-          // the normalized rawName that buildStoreAssignments uses as its lookup key.
           priorRouteMap.set(item.name.toLowerCase(), storeName)
         }
       }
     }
   }
 
-  const storeAssignments = buildStoreAssignments(
+  const { assignments: storeAssignments } = buildStoreAssignments(
     (slots ?? []) as unknown as Parameters<typeof buildStoreAssignments>[0],
     stores.map(s => s.name),
-    priorRouteMap
+    priorRouteMap,
+    unitPreferences
   )
 
   const manualItems: ManualItem[] =
     (existingList?.manual_overrides as { added?: ManualItem[] } | null)?.added ?? []
 
-  // Preserve checked states of manual items across regeneration
   const priorAssignments = (existingList?.store_assignments ?? {}) as StoreAssignments
   const priorCheckedMap = new Map<string, boolean>()
   for (const storeName of Object.keys(priorAssignments)) {
@@ -133,8 +267,6 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
         meal_plan_id: plan.id,
         store_assignments: storeAssignments,
         generated_at: now,
-        // manual_overrides intentionally omitted — Supabase only updates
-        // specified columns on conflict, so existing manual items are preserved
       },
       { onConflict: 'meal_plan_id' }
     )
@@ -151,6 +283,101 @@ export async function generateShoppingList(weekStart: string): Promise<ShoppingL
     manualItems,
     stores,
   }
+}
+
+export async function generateShoppingList(weekStart: string): Promise<GenerateResult | null> {
+  const { db, householdId } = await getContext()
+
+  // Load stored unit preferences
+  const { data: household } = await db
+    .from('households')
+    .select('preferences')
+    .eq('id', householdId)
+    .single()
+
+  const storedPrefs = (household?.preferences as Record<string, unknown>) ?? {}
+  const unitPreferences: UnitPreferences =
+    (storedPrefs.unit_preferences as UnitPreferences) ?? {}
+
+  // Get meal plan + slots to detect conflicts
+  const stores = await loadStores(db, householdId)
+
+  const { data: plan } = await db
+    .from('meal_plans')
+    .select('id')
+    .eq('household_id', householdId)
+    .eq('week_start_date', weekStart)
+    .single()
+
+  if (!plan) return null
+
+  const { data: slots } = await db
+    .from('meal_plan_recipes')
+    .select(`servings_override, recipe:recipes(default_servings, ingredients)`)
+    .eq('meal_plan_id', plan.id)
+
+  const { data: existingList } = await db
+    .from('shopping_lists')
+    .select('manual_overrides, store_assignments')
+    .eq('meal_plan_id', plan.id)
+    .single()
+
+  const priorRouteMap = new Map<string, string>()
+  if (existingList?.store_assignments) {
+    const prior = existingList.store_assignments as StoreAssignments
+    for (const [storeName, items] of Object.entries(prior)) {
+      for (const item of (items as ShoppingItem[])) {
+        if (!item.manual && !priorRouteMap.has(item.name.toLowerCase())) {
+          priorRouteMap.set(item.name.toLowerCase(), storeName)
+        }
+      }
+    }
+  }
+
+  const { conflicts } = buildStoreAssignments(
+    (slots ?? []) as unknown as Parameters<typeof buildStoreAssignments>[0],
+    stores.map(s => s.name),
+    priorRouteMap,
+    unitPreferences
+  )
+
+  if (conflicts.length > 0) {
+    const suggestions = await fetchConversionSuggestions(conflicts)
+    const resolvedConflicts = conflicts.map(c =>
+      computeConflictDisplay(c, suggestions[c.normalizedName])
+    )
+    return { type: 'conflicts', conflicts: resolvedConflicts, suggestions }
+  }
+
+  const result = await _buildAndSaveList(db, householdId, weekStart, unitPreferences)
+  if (!result) return null
+  return { type: 'success', ...result }
+}
+
+export async function resolveAndGenerateList(
+  weekStart: string,
+  newPreferences: UnitPreferences
+): Promise<ShoppingListData | null> {
+  const { db, householdId } = await getContext()
+
+  // Merge new preferences into existing stored preferences
+  const { data: household } = await db
+    .from('households')
+    .select('preferences')
+    .eq('id', householdId)
+    .single()
+
+  const currentPrefs = (household?.preferences as Record<string, unknown>) ?? {}
+  const currentUnitPrefs = (currentPrefs.unit_preferences as UnitPreferences) ?? {}
+  const mergedUnitPrefs: UnitPreferences = { ...currentUnitPrefs, ...newPreferences }
+
+  // Best-effort preference save — non-fatal if it fails
+  await db
+    .from('households')
+    .update({ preferences: { ...currentPrefs, unit_preferences: mergedUnitPrefs } })
+    .eq('id', householdId)
+
+  return _buildAndSaveList(db, householdId, weekStart, mergedUnitPrefs)
 }
 
 export async function loadShoppingList(weekStart: string): Promise<ShoppingListData | null> {
