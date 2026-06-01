@@ -395,7 +395,7 @@ export default function ShoppingClient({
               )}
               <button
                 onClick={handleGenerate}
-                disabled={isPending || !hasMeals}
+                disabled={isPending || !hasMeals || pendingConflicts !== null}
                 className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-xl disabled:opacity-40 active:bg-green-700"
               >
                 {isPending ? 'Building…' : assignments ? 'Regenerate' : 'Build List'}
@@ -856,8 +856,8 @@ export default function ShoppingClient({
       {/* Conflict resolution bottom sheet */}
       {pendingConflicts && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[70vh]">
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => { setPendingConflicts(null); setConflictSelections({}) }} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[70vh]">
             <div className="flex flex-col items-center pt-3 pb-3 px-4 border-b border-gray-100">
               <div className="w-10 h-1 bg-gray-300 rounded-full mb-3" />
               <h2 className="font-semibold text-gray-900 text-base">Review consolidated ingredients</h2>
@@ -877,7 +877,7 @@ export default function ShoppingClient({
                         [conflict.normalizedName]: e.target.value,
                       }))
                     }
-                    className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-900 bg-white"
+                    className="flex-shrink-0 text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-900 bg-white"
                   >
                     {!conflictSelections[conflict.normalizedName] && (
                       <option value="" disabled>Choose unit…</option>
@@ -891,7 +891,7 @@ export default function ShoppingClient({
                 </div>
               ))}
             </div>
-            <div className="px-4 pb-6 pt-3">
+            <div className="px-4 pt-3 flex flex-col gap-2" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
               <button
                 onClick={handleResolveConflicts}
                 disabled={
@@ -901,6 +901,12 @@ export default function ShoppingClient({
                 className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 active:bg-green-700"
               >
                 {isPending ? 'Building…' : 'Generate List'}
+              </button>
+              <button
+                onClick={() => { setPendingConflicts(null); setConflictSelections({}) }}
+                className="w-full py-2 text-sm text-gray-500"
+              >
+                Cancel
               </button>
             </div>
           </div>
