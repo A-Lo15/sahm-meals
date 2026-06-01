@@ -271,6 +271,8 @@ export function buildStoreAssignments(
       const f = agg.get(k)!.family
       return f === 'volume' || f === 'weight'
     })
+    // Only handle other↔volume or other↔weight conflicts. Volume↔weight cross-family
+    // and same-family conflicts (grams vs ounces) are handled elsewhere or out of scope.
     if (!otherKey || !measureKey) continue
 
     const otherEntry = agg.get(otherKey)!
@@ -289,7 +291,10 @@ export function buildStoreAssignments(
         agg.delete(otherKey)
       }
     } else {
-      // No stored preference or factor — surface as a conflict for the UI
+      // No stored preference or factor — surface as a conflict for the UI.
+      // Remove from agg so assignments never contains duplicate unmerged entries.
+      agg.delete(otherKey)
+      agg.delete(measureKey)
       conflicts.push({
         normalizedName: name,
         displayName: name.charAt(0).toUpperCase() + name.slice(1),
