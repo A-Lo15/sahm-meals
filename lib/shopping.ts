@@ -290,8 +290,17 @@ export function buildStoreAssignments(
         measureEntry.canonical += otherEntry.canonical * pref.factor
         agg.delete(otherKey)
       }
+    } else if (pref?.preferredFamily != null) {
+      // User expressed a preference but no conversion factor is available (Claude
+      // failed to return one). Drop the non-preferred side without converting —
+      // the quantities are approximate but the conflict won't re-surface every week.
+      if (pref.preferredFamily === 'other') {
+        agg.delete(measureKey)
+      } else {
+        agg.delete(otherKey)
+      }
     } else {
-      // No stored preference or factor — surface as a conflict for the UI.
+      // True first-time conflict — surface as a conflict for the UI.
       // Remove from agg so assignments never contains duplicate unmerged entries.
       agg.delete(otherKey)
       agg.delete(measureKey)
@@ -318,14 +327,30 @@ export function buildStoreAssignments(
     let displayQty: number
     let displayUnit: string
 
+    const pref = unitPreferences[rawName]
+
     if (family === 'volume') {
-      const converted = volumeFromCanonical(canonical)
-      displayQty = converted.qty
-      displayUnit = converted.unit
+      const preferred = pref?.preferredFamily === 'volume' ? pref.preferredUnit : null
+      const factor = preferred ? TO_TABLESPOONS[preferred] : null
+      if (factor) {
+        displayQty = canonical / factor
+        displayUnit = preferred!
+      } else {
+        const converted = volumeFromCanonical(canonical)
+        displayQty = converted.qty
+        displayUnit = converted.unit
+      }
     } else if (family === 'weight') {
-      const converted = weightFromCanonical(canonical)
-      displayQty = converted.qty
-      displayUnit = converted.unit
+      const preferred = pref?.preferredFamily === 'weight' ? pref.preferredUnit : null
+      const factor = preferred ? TO_GRAMS[preferred] : null
+      if (factor) {
+        displayQty = canonical / factor
+        displayUnit = preferred!
+      } else {
+        const converted = weightFromCanonical(canonical)
+        displayQty = converted.qty
+        displayUnit = converted.unit
+      }
     } else {
       displayQty = canonical
       displayUnit = unit
