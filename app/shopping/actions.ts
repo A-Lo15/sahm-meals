@@ -12,7 +12,6 @@ import {
   type ShoppingItem,
   type ManualItem,
   type ConflictItem,
-  type UnitPreference,
   type UnitPreferences,
 } from '@/lib/shopping'
 import Anthropic from '@anthropic-ai/sdk'

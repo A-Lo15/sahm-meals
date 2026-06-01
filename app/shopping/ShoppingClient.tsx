@@ -3,8 +3,8 @@
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { generateShoppingList, saveCheckedState, saveManualItems } from './actions'
-import { CATEGORY_ORDER, type StoreAssignments, type ShoppingItem, type ManualItem } from '@/lib/shopping'
+import { generateShoppingList, saveCheckedState, saveManualItems, resolveAndGenerateList, type ResolvedConflict, type GenerateResult } from './actions'
+import { CATEGORY_ORDER, type StoreAssignments, type ShoppingItem, type ManualItem, type UnitPreferences } from '@/lib/shopping'
 import type { IngredientCategory } from '@/lib/types'
 import { type Store } from '@/lib/stores'
 
@@ -54,6 +54,11 @@ export default function ShoppingClient({
   const [assignments, setAssignments] = useState<StoreAssignments | null>(initialAssignments)
   const [generatedAt, setGeneratedAt] = useState(initialGeneratedAt)
   const [stores, setStores] = useState<Store[]>(initialStores)
+  const [pendingConflicts, setPendingConflicts] = useState<{
+    conflicts: ResolvedConflict[]
+    suggestions: Record<string, number>
+  } | null>(null)
+  const [conflictSelections, setConflictSelections] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState<string>('all')
   const [isPending, startTransition] = useTransition()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -117,19 +122,66 @@ export default function ShoppingClient({
     setPendingUndo(null)
     setSwipeOpenKey(null)
     startTransition(async () => {
-      const result = await generateShoppingList(weekStart)
-      if (result) {
-        setListId(result.id)
-        setAssignments(result.storeAssignments)
-        setGeneratedAt(result.generatedAt)
-        setManualItems(result.manualItems)
-        setStores(result.stores)
-        setActiveTab(prev =>
-          prev === 'all' || result.stores.some(s => s.name === prev)
-            ? prev
-            : 'all'
-        )
+      const result: GenerateResult | null = await generateShoppingList(weekStart)
+      if (!result) return
+
+      if (result.type === 'conflicts') {
+        // Pre-select suggested options
+        const preSelections: Record<string, string> = {}
+        for (const conflict of result.conflicts) {
+          const suggested = conflict.options.find(o => o.isSuggested)
+          if (suggested) preSelections[conflict.normalizedName] = suggested.unit
+        }
+        setConflictSelections(preSelections)
+        setPendingConflicts({ conflicts: result.conflicts, suggestions: result.suggestions })
+        return
       }
+
+      setListId(result.id)
+      setAssignments(result.storeAssignments)
+      setGeneratedAt(result.generatedAt)
+      setManualItems(result.manualItems)
+      setStores(result.stores)
+      setActiveTab(prev =>
+        prev === 'all' || result.stores.some(s => s.name === prev)
+          ? prev
+          : 'all'
+      )
+    })
+  }
+
+  function handleResolveConflicts() {
+    if (!pendingConflicts) return
+
+    const newPreferences: UnitPreferences = {}
+    for (const conflict of pendingConflicts.conflicts) {
+      const selectedUnit = conflictSelections[conflict.normalizedName]
+      if (!selectedUnit) continue
+      const selectedOption = conflict.options.find(o => o.unit === selectedUnit)
+      if (!selectedOption) continue
+      newPreferences[conflict.normalizedName] = {
+        preferredUnit: selectedUnit,
+        preferredFamily: selectedOption.family,
+        factor: pendingConflicts.suggestions[conflict.normalizedName] ?? null,
+      }
+    }
+
+    setPendingConflicts(null)
+    setConflictSelections({})
+
+    startTransition(async () => {
+      const result = await resolveAndGenerateList(weekStart, newPreferences)
+      if (!result) return
+      setListId(result.id)
+      setAssignments(result.storeAssignments)
+      setGeneratedAt(result.generatedAt)
+      setManualItems(result.manualItems)
+      setStores(result.stores)
+      setActiveTab(prev =>
+        prev === 'all' || result.stores.some(s => s.name === prev)
+          ? prev
+          : 'all'
+      )
     })
   }
 
@@ -799,6 +851,60 @@ export default function ShoppingClient({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Conflict resolution bottom sheet */}
+      {pendingConflicts && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[70vh]">
+            <div className="flex flex-col items-center pt-3 pb-3 px-4 border-b border-gray-100">
+              <div className="w-10 h-1 bg-gray-300 rounded-full mb-3" />
+              <h2 className="font-semibold text-gray-900 text-base">Review consolidated ingredients</h2>
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                These ingredients appear in mixed units. Your choice will be remembered.
+              </p>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-3">
+              {pendingConflicts.conflicts.map(conflict => (
+                <div key={conflict.normalizedName} className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-gray-900">{conflict.displayName}</span>
+                  <select
+                    value={conflictSelections[conflict.normalizedName] ?? ''}
+                    onChange={e =>
+                      setConflictSelections(prev => ({
+                        ...prev,
+                        [conflict.normalizedName]: e.target.value,
+                      }))
+                    }
+                    className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-900 bg-white"
+                  >
+                    {!conflictSelections[conflict.normalizedName] && (
+                      <option value="" disabled>Choose unit…</option>
+                    )}
+                    {conflict.options.map(opt => (
+                      <option key={opt.unit} value={opt.unit}>
+                        {opt.displayQty}{opt.isSuggested ? ' (suggested)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 pb-6 pt-3">
+              <button
+                onClick={handleResolveConflicts}
+                disabled={
+                  isPending ||
+                  pendingConflicts.conflicts.some(c => !conflictSelections[c.normalizedName])
+                }
+                className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 active:bg-green-700"
+              >
+                {isPending ? 'Building…' : 'Generate List'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
