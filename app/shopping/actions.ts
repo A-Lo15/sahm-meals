@@ -108,7 +108,7 @@ function computeConflictDisplay(
 ): ResolvedConflict {
   const [otherOpt, measureOpt] = conflict.options
 
-  if (factor) {
+  if (factor != null && factor > 0) {
     // Compute merged totals for both unit choices
     const totalCount = otherOpt.canonicalQty + measureOpt.canonicalQty / factor
     const totalMeasure = otherOpt.canonicalQty * factor + measureOpt.canonicalQty
@@ -267,6 +267,8 @@ async function _buildAndSaveList(
         meal_plan_id: plan.id,
         store_assignments: storeAssignments,
         generated_at: now,
+        // manual_overrides intentionally omitted — Supabase only updates
+        // specified columns on conflict, so existing manual items are preserved
       },
       { onConflict: 'meal_plan_id' }
     )
@@ -372,10 +374,11 @@ export async function resolveAndGenerateList(
   const mergedUnitPrefs: UnitPreferences = { ...currentUnitPrefs, ...newPreferences }
 
   // Best-effort preference save — non-fatal if it fails
-  await db
+  const { error: prefSaveError } = await db
     .from('households')
     .update({ preferences: { ...currentPrefs, unit_preferences: mergedUnitPrefs } })
     .eq('id', householdId)
+  if (prefSaveError) console.error('Failed to save unit preferences:', prefSaveError)
 
   return _buildAndSaveList(db, householdId, weekStart, mergedUnitPrefs)
 }
