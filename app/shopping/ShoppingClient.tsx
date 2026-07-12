@@ -359,7 +359,7 @@ export default function ShoppingClient({
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => { router.refresh(); router.push(`/planner?plan=${mealPlanId}`) }}
+              onClick={() => { router.refresh(); router.push(`/planner/${mealPlanId}`) }}
               className="text-sm text-gray-500 py-1 pr-3"
             >
               ← Plan
@@ -407,7 +407,7 @@ export default function ShoppingClient({
       {!hasMeals && (
         <div className="max-w-lg mx-auto px-4 py-16 text-center">
           <p className="text-4xl mb-4">🗓</p>
-          <p className="text-gray-600 font-medium">No meals planned this week</p>
+          <p className="text-gray-600 font-medium">No meals planned for this plan</p>
           <p className="text-sm text-gray-400 mt-1">Add meals in the planner first</p>
           <button
             onClick={() => router.push('/planner')}
@@ -424,10 +424,10 @@ export default function ShoppingClient({
           <p className="text-4xl mb-4">🛒</p>
           <p className="text-gray-600 font-medium">Ready to build your list</p>
           <p className="text-sm text-gray-400 mt-1">
-            Tap &ldquo;Build List&rdquo; to aggregate ingredients from this week&apos;s meals
+            Tap &ldquo;Build List&rdquo; to aggregate ingredients from this plan&apos;s meals
           </p>
           <button
-            onClick={() => { router.refresh(); router.push(`/planner?plan=${mealPlanId}`) }}
+            onClick={() => { router.refresh(); router.push(`/planner/${mealPlanId}`) }}
             className="inline-block mt-4 text-sm text-green-600 font-medium"
           >
             ← Back to plan view
