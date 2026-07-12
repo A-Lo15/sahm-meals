@@ -31,7 +31,7 @@ const BADGE_COLORS = [
 const REMOVE_BTN_WIDTH = 64 // px — width of the trailing Remove button
 
 interface Props {
-  weekStart: string
+  mealPlanId: string
   initialListId: string | null
   initialAssignments: StoreAssignments | null
   initialGeneratedAt: string | null
@@ -41,7 +41,7 @@ interface Props {
 }
 
 export default function ShoppingClient({
-  weekStart,
+  mealPlanId,
   initialListId,
   initialAssignments,
   initialGeneratedAt,
@@ -109,20 +109,12 @@ export default function ShoppingClient({
     return BADGE_COLORS[idx < 0 ? 0 : idx % BADGE_COLORS.length]!
   }
 
-  function formatWeekLabel() {
-    const start = new Date(weekStart)
-    const end = new Date(weekStart)
-    end.setDate(end.getDate() + 6)
-    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-    return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`
-  }
-
   function handleGenerate() {
     if (undoTimer.current) clearTimeout(undoTimer.current)
     setPendingUndo(null)
     setSwipeOpenKey(null)
     startTransition(async () => {
-      const result: GenerateResult | null = await generateShoppingList(weekStart)
+      const result: GenerateResult | null = await generateShoppingList(mealPlanId)
       if (!result) return
 
       if (result.type === 'conflicts') {
@@ -170,7 +162,7 @@ export default function ShoppingClient({
     setConflictSelections({})
 
     startTransition(async () => {
-      const result = await resolveAndGenerateList(weekStart, newPreferences)
+      const result = await resolveAndGenerateList(mealPlanId, newPreferences)
       if (!result) return
       setListId(result.id)
       setAssignments(result.storeAssignments)
@@ -367,14 +359,13 @@ export default function ShoppingClient({
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => { router.refresh(); router.push(`/planner?week=${weekStart}`) }}
+              onClick={() => { router.refresh(); router.push(`/planner?plan=${mealPlanId}`) }}
               className="text-sm text-gray-500 py-1 pr-3"
             >
-              ← Week
+              ← Plan
             </button>
             <div className="text-center">
               <h1 className="font-bold text-gray-900 text-base">Shopping List</h1>
-              <p className="text-xs text-gray-400">{formatWeekLabel()}</p>
             </div>
             <div className="flex items-center gap-2">
               <Link
@@ -436,10 +427,10 @@ export default function ShoppingClient({
             Tap &ldquo;Build List&rdquo; to aggregate ingredients from this week&apos;s meals
           </p>
           <button
-            onClick={() => { router.refresh(); router.push(`/planner?week=${weekStart}`) }}
+            onClick={() => { router.refresh(); router.push(`/planner?plan=${mealPlanId}`) }}
             className="inline-block mt-4 text-sm text-green-600 font-medium"
           >
-            ← Back to week view
+            ← Back to plan view
           </button>
         </div>
       )}

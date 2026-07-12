@@ -187,7 +187,7 @@ export type GenerateResult =
 async function _buildAndSaveList(
   db: ReturnType<typeof createAdminClient>,
   householdId: string,
-  weekStart: string,
+  mealPlanId: string,
   unitPreferences: UnitPreferences
 ): Promise<ShoppingListData | null> {
   const stores = await loadStores(db, householdId)
@@ -195,8 +195,8 @@ async function _buildAndSaveList(
   const { data: plan } = await db
     .from('meal_plans')
     .select('id')
+    .eq('id', mealPlanId)
     .eq('household_id', householdId)
-    .eq('week_start_date', weekStart)
     .single()
 
   if (!plan) return null
@@ -204,12 +204,12 @@ async function _buildAndSaveList(
   const { data: slots } = await db
     .from('meal_plan_recipes')
     .select(`servings_override, recipe:recipes(default_servings, ingredients)`)
-    .eq('meal_plan_id', plan.id)
+    .eq('meal_plan_id', mealPlanId)
 
   const { data: existingList } = await db
     .from('shopping_lists')
     .select('manual_overrides, store_assignments')
-    .eq('meal_plan_id', plan.id)
+    .eq('meal_plan_id', mealPlanId)
     .single()
 
   const priorRouteMap = new Map<string, string>()
@@ -263,7 +263,7 @@ async function _buildAndSaveList(
     .from('shopping_lists')
     .upsert(
       {
-        meal_plan_id: plan.id,
+        meal_plan_id: mealPlanId,
         store_assignments: storeAssignments,
         generated_at: now,
         // manual_overrides intentionally omitted — Supabase only updates
@@ -280,13 +280,13 @@ async function _buildAndSaveList(
     id: saved.id,
     storeAssignments,
     generatedAt: saved.generated_at,
-    mealPlanId: plan.id,
+    mealPlanId,
     manualItems,
     stores,
   }
 }
 
-export async function generateShoppingList(weekStart: string): Promise<GenerateResult | null> {
+export async function generateShoppingList(mealPlanId: string): Promise<GenerateResult | null> {
   const { db, householdId } = await getContext()
 
   // Load stored unit preferences
@@ -306,8 +306,8 @@ export async function generateShoppingList(weekStart: string): Promise<GenerateR
   const { data: plan } = await db
     .from('meal_plans')
     .select('id')
+    .eq('id', mealPlanId)
     .eq('household_id', householdId)
-    .eq('week_start_date', weekStart)
     .single()
 
   if (!plan) return null
@@ -315,12 +315,12 @@ export async function generateShoppingList(weekStart: string): Promise<GenerateR
   const { data: slots } = await db
     .from('meal_plan_recipes')
     .select(`servings_override, recipe:recipes(default_servings, ingredients)`)
-    .eq('meal_plan_id', plan.id)
+    .eq('meal_plan_id', mealPlanId)
 
   const { data: existingList } = await db
     .from('shopping_lists')
     .select('manual_overrides, store_assignments')
-    .eq('meal_plan_id', plan.id)
+    .eq('meal_plan_id', mealPlanId)
     .single()
 
   const priorRouteMap = new Map<string, string>()
@@ -350,13 +350,13 @@ export async function generateShoppingList(weekStart: string): Promise<GenerateR
     return { type: 'conflicts', conflicts: resolvedConflicts, suggestions }
   }
 
-  const result = await _buildAndSaveList(db, householdId, weekStart, unitPreferences)
+  const result = await _buildAndSaveList(db, householdId, mealPlanId, unitPreferences)
   if (!result) return null
   return { type: 'success', ...result }
 }
 
 export async function resolveAndGenerateList(
-  weekStart: string,
+  mealPlanId: string,
   newPreferences: UnitPreferences
 ): Promise<ShoppingListData | null> {
   const { db, householdId } = await getContext()
@@ -379,18 +379,18 @@ export async function resolveAndGenerateList(
     .eq('id', householdId)
   if (prefSaveError) console.error('Failed to save unit preferences:', prefSaveError)
 
-  return _buildAndSaveList(db, householdId, weekStart, mergedUnitPrefs)
+  return _buildAndSaveList(db, householdId, mealPlanId, mergedUnitPrefs)
 }
 
-export async function loadShoppingList(weekStart: string): Promise<ShoppingListData | null> {
+export async function loadShoppingList(mealPlanId: string): Promise<ShoppingListData | null> {
   const { db, householdId } = await getContext()
   const stores = await loadStores(db, householdId)
 
   const { data: plan } = await db
     .from('meal_plans')
     .select('id')
+    .eq('id', mealPlanId)
     .eq('household_id', householdId)
-    .eq('week_start_date', weekStart)
     .single()
 
   if (!plan) return null
@@ -398,7 +398,7 @@ export async function loadShoppingList(weekStart: string): Promise<ShoppingListD
   const { data: list } = await db
     .from('shopping_lists')
     .select('id, store_assignments, generated_at, manual_overrides')
-    .eq('meal_plan_id', plan.id)
+    .eq('meal_plan_id', mealPlanId)
     .single()
 
   if (!list) return null
@@ -437,7 +437,7 @@ export async function loadShoppingList(weekStart: string): Promise<ShoppingListD
     id: list.id,
     storeAssignments,
     generatedAt: list.generated_at,
-    mealPlanId: plan.id,
+    mealPlanId,
     manualItems,
     stores,
   }
