@@ -11,8 +11,16 @@ alter table meal_plans
   add column start_date date not null,
   add column end_date   date not null;
 
+-- meal_plans: enforce date ordering
+alter table meal_plans
+  add constraint meal_plans_date_range_check check (end_date >= start_date);
+
 -- meal_plan_recipes: replace day_of_week with plan_date
 alter table meal_plan_recipes
   drop constraint if exists meal_plan_recipes_day_of_week_check,
   drop column day_of_week,
   add column plan_date date not null;
+
+-- index for per-date slot queries within a plan
+create index meal_plan_recipes_plan_date_idx
+  on meal_plan_recipes (meal_plan_id, plan_date);
