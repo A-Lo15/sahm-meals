@@ -27,32 +27,58 @@ async function getContext() {
   return { db, householdId }
 }
 
-export async function ensureMealPlan(weekStartDate: string): Promise<{ id: string }> {
+export async function getMealPlans(): Promise<
+  { id: string; start_date: string; end_date: string; meal_count: number }[]
+> {
   const { db, householdId } = await getContext()
 
-  const { data: existing } = await db
+  const { data: plans } = await db
     .from('meal_plans')
-    .select('id')
+    .select('id, start_date, end_date')
     .eq('household_id', householdId)
-    .eq('week_start_date', weekStartDate)
-    .single()
+    .order('start_date', { ascending: false })
 
-  if (existing) return { id: existing.id }
+  if (!plans) return []
 
-  const { data: created, error } = await db
+  const counts = await Promise.all(
+    plans.map(async (p) => {
+      const { count } = await db
+        .from('meal_plan_recipes')
+        .select('id', { count: 'exact', head: true })
+        .eq('meal_plan_id', p.id)
+      return count ?? 0
+    })
+  )
+
+  return plans.map((p, i) => ({
+    id: p.id,
+    start_date: p.start_date,
+    end_date: p.end_date,
+    meal_count: counts[i],
+  }))
+}
+
+export async function createMealPlan(
+  startDate: string,
+  endDate: string
+): Promise<{ id: string }> {
+  const { db, householdId } = await getContext()
+
+  const { data, error } = await db
     .from('meal_plans')
-    .insert({ household_id: householdId, week_start_date: weekStartDate })
+    .insert({ household_id: householdId, start_date: startDate, end_date: endDate })
     .select('id')
     .single()
 
   if (error) throw error
-  return { id: created.id }
+  revalidatePath('/planner')
+  return { id: data.id }
 }
 
-export async function addRecipeToDay(
+export async function addRecipeToDate(
   mealPlanId: string,
   recipeId: string,
-  dayOfWeek: number
+  planDate: string
 ): Promise<{ id: string }> {
   const { db } = await getContext()
 
@@ -60,7 +86,7 @@ export async function addRecipeToDay(
     .from('meal_plan_recipes')
     .select('position')
     .eq('meal_plan_id', mealPlanId)
-    .eq('day_of_week', dayOfWeek)
+    .eq('plan_date', planDate)
     .order('position', { ascending: false })
     .limit(1)
     .single()
@@ -69,17 +95,12 @@ export async function addRecipeToDay(
 
   const { data, error } = await db
     .from('meal_plan_recipes')
-    .insert({
-      meal_plan_id: mealPlanId,
-      recipe_id: recipeId,
-      day_of_week: dayOfWeek,
-      position: nextPosition,
-    })
+    .insert({ meal_plan_id: mealPlanId, recipe_id: recipeId, plan_date: planDate, position: nextPosition })
     .select('id')
     .single()
 
   if (error) throw error
-  revalidatePath('/planner')
+  revalidatePath(`/planner/${mealPlanId}`)
   return { id: data.id }
 }
 
@@ -89,10 +110,7 @@ export async function removeSlot(slotId: string): Promise<void> {
   revalidatePath('/planner')
 }
 
-export async function updateSlotServings(
-  slotId: string,
-  servings: number
-): Promise<void> {
+export async function updateSlotServings(slotId: string, servings: number): Promise<void> {
   const { db } = await getContext()
   await db
     .from('meal_plan_recipes')
@@ -100,10 +118,10 @@ export async function updateSlotServings(
     .eq('id', slotId)
 }
 
-export async function importAndAddToDay(
+export async function importAndAddToDate(
   parsedRecipe: ParsedRecipe,
   mealPlanId: string,
-  dayOfWeek: number
+  planDate: string
 ): Promise<{ recipeId: string; slotId: string }> {
   const { db, householdId } = await getContext()
 
@@ -134,41 +152,35 @@ export async function importAndAddToDay(
 
   if (recipeError) throw recipeError
 
-  const { data: existing } = await db
+  const { data: existingSlot } = await db
     .from('meal_plan_recipes')
     .select('position')
     .eq('meal_plan_id', mealPlanId)
-    .eq('day_of_week', dayOfWeek)
+    .eq('plan_date', planDate)
     .order('position', { ascending: false })
     .limit(1)
     .single()
 
-  const nextPosition = existing ? existing.position + 1 : 0
+  const nextPosition = existingSlot ? existingSlot.position + 1 : 0
 
   const { data: slot, error: slotError } = await db
     .from('meal_plan_recipes')
-    .insert({
-      meal_plan_id: mealPlanId,
-      recipe_id: recipe.id,
-      day_of_week: dayOfWeek,
-      position: nextPosition,
-    })
+    .insert({ meal_plan_id: mealPlanId, recipe_id: recipe.id, plan_date: planDate, position: nextPosition })
     .select('id')
     .single()
 
   if (slotError) {
-    const { error: deleteError } = await db.from('recipes').delete().eq('id', recipe.id)
-    if (deleteError) console.error('Failed to clean up orphaned recipe', recipe.id, deleteError)
+    await db.from('recipes').delete().eq('id', recipe.id)
     throw slotError
   }
 
-  revalidatePath('/planner')
+  revalidatePath(`/planner/${mealPlanId}`)
   return { recipeId: recipe.id, slotId: slot.id }
 }
 
 export async function createCustomMeal(
   mealPlanId: string,
-  dayOfWeek: number,
+  planDate: string,
   input: CustomMealInput
 ): Promise<SlotWithRecipe> {
   const { db, householdId } = await getContext()
@@ -200,39 +212,33 @@ export async function createCustomMeal(
     .single()
   if (recipeError) throw recipeError
 
-  const { data: existing } = await db
+  const { data: existingSlot } = await db
     .from('meal_plan_recipes')
     .select('position')
     .eq('meal_plan_id', mealPlanId)
-    .eq('day_of_week', dayOfWeek)
+    .eq('plan_date', planDate)
     .order('position', { ascending: false })
     .limit(1)
     .single()
-  const nextPosition = existing ? existing.position + 1 : 0
+  const nextPosition = existingSlot ? existingSlot.position + 1 : 0
 
   const { data: slot, error: slotError } = await db
     .from('meal_plan_recipes')
-    .insert({
-      meal_plan_id: mealPlanId,
-      recipe_id: recipe.id,
-      day_of_week: dayOfWeek,
-      position: nextPosition,
-    })
+    .insert({ meal_plan_id: mealPlanId, recipe_id: recipe.id, plan_date: planDate, position: nextPosition })
     .select('id')
     .single()
 
   if (slotError) {
-    const { error: deleteError } = await db.from('recipes').delete().eq('id', recipe.id)
-    if (deleteError) console.error('Failed to clean up orphaned recipe', recipe.id, deleteError)
+    await db.from('recipes').delete().eq('id', recipe.id)
     throw slotError
   }
 
-  revalidatePath('/planner')
+  revalidatePath(`/planner/${mealPlanId}`)
   return {
     id: slot.id,
     meal_plan_id: mealPlanId,
     recipe_id: recipe.id,
-    day_of_week: dayOfWeek,
+    plan_date: planDate,
     servings_override: null,
     position: nextPosition,
     recipe: {
@@ -289,8 +295,7 @@ export async function forkSlotRecipe(
     .eq('meal_plans.household_id', householdId)
     .single()
   if (!slotCheck) {
-    const { error: deleteError } = await db.from('recipes').delete().eq('id', copy.id)
-    if (deleteError) console.error('Failed to clean up orphaned recipe copy', copy.id, deleteError)
+    await db.from('recipes').delete().eq('id', copy.id)
     throw new Error('Slot not found or access denied')
   }
 
@@ -300,15 +305,14 @@ export async function forkSlotRecipe(
     .eq('id', slotId)
 
   if (slotError) {
-    const { error: deleteError } = await db.from('recipes').delete().eq('id', copy.id)
-    if (deleteError) console.error('Failed to clean up orphaned recipe copy', copy.id, deleteError)
+    await db.from('recipes').delete().eq('id', copy.id)
     throw slotError
   }
 
   const { data: slot, error: fetchError } = await db
     .from('meal_plan_recipes')
     .select(
-      `id, meal_plan_id, recipe_id, day_of_week, servings_override, position,
+      `id, meal_plan_id, recipe_id, plan_date, servings_override, position,
        recipe:recipes(id, title, default_servings, source_image_url, state, in_library, ingredients, instructions)`
     )
     .eq('id', slotId)
@@ -319,10 +323,7 @@ export async function forkSlotRecipe(
   return slot as unknown as SlotWithRecipe
 }
 
-export async function updateRecipe(
-  recipeId: string,
-  input: RecipeEditInput
-): Promise<void> {
+export async function updateRecipe(recipeId: string, input: RecipeEditInput): Promise<void> {
   const { db, householdId } = await getContext()
 
   const { data, error } = await db
@@ -353,12 +354,10 @@ export async function removeSlotAndRecipe(slotId: string, recipeId: string): Pro
     .eq('id', slotId)
   if (slotDeleteError) throw slotDeleteError
 
-  const { data: remainingSlots, error: slotsError } = await db
+  const { data: remainingSlots } = await db
     .from('meal_plan_recipes')
     .select('id')
     .eq('recipe_id', recipeId)
-
-  if (slotsError) throw slotsError
 
   if (!remainingSlots || remainingSlots.length === 0) {
     await db.from('recipes').delete().eq('id', recipeId).eq('household_id', householdId)
