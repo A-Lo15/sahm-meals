@@ -80,7 +80,16 @@ export async function addRecipeToDate(
   recipeId: string,
   planDate: string
 ): Promise<{ id: string }> {
-  const { db } = await getContext()
+  const { db, householdId } = await getContext()
+
+  // Verify plan belongs to this household
+  const { data: plan } = await db
+    .from('meal_plans')
+    .select('id')
+    .eq('id', mealPlanId)
+    .eq('household_id', householdId)
+    .single()
+  if (!plan) throw new Error('Meal plan not found or access denied')
 
   const { data: existing } = await db
     .from('meal_plan_recipes')
@@ -105,7 +114,18 @@ export async function addRecipeToDate(
 }
 
 export async function removeSlot(slotId: string): Promise<void> {
-  const { db } = await getContext()
+  const { db, householdId } = await getContext()
+
+  // Verify the slot belongs to this household before deleting
+  const { data: slot } = await db
+    .from('meal_plan_recipes')
+    .select('id, meal_plans!inner(household_id)')
+    .eq('id', slotId)
+    .eq('meal_plans.household_id', householdId)
+    .single()
+
+  if (!slot) return // not found or not authorized
+
   await db.from('meal_plan_recipes').delete().eq('id', slotId)
   revalidatePath('/planner')
 }
@@ -116,6 +136,9 @@ export async function updateSlotServings(slotId: string, servings: number): Prom
     .from('meal_plan_recipes')
     .update({ servings_override: servings })
     .eq('id', slotId)
+  // Note: optimistic UI updates servings client-side; revalidatePath ensures
+  // server state stays consistent for page refreshes
+  revalidatePath('/planner')
 }
 
 export async function importAndAddToDate(
