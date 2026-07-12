@@ -515,7 +515,6 @@ export default function PlanDetailClient({
       {pendingImport !== null && (
         <ImportReviewModal
           recipe={pendingImport.recipe}
-          // @ts-expect-error Task 6 will rename this prop from `day` to `planDate`
           planDate={pendingImport.planDate}
           onConfirm={handleConfirmImport}
           onDismiss={handleDismissImport}
@@ -523,7 +522,6 @@ export default function PlanDetailClient({
       )}
       {customDate !== null && (
         <CustomMealSheet
-          // @ts-expect-error Task 6 will rename this prop from `dayOfWeek` to `planDate`
           planDate={customDate}
           onClose={() => setCustomDate(null)}
           onSave={(input) => handleCustomMeal(customDate, input)}
