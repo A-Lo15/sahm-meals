@@ -25,12 +25,12 @@ function formatRange(startDate: string, endDate: string): string {
 
 export default function PlannerClient({ initialPlans }: Props) {
   const router = useRouter()
-  const [plans, setPlans] = useState<Plan[]>(initialPlans)
+  const [plans] = useState<Plan[]>(initialPlans)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
-  const [, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition()
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -54,6 +54,7 @@ export default function PlannerClient({ initialPlans }: Props) {
     startTransition(async () => {
       try {
         const { id } = await createMealPlan(startDate, endDate)
+        setSheetOpen(false)
         router.push(`/planner/${id}`)
       } catch {
         setCreateError('Failed to create plan. Please try again.')
@@ -147,10 +148,10 @@ export default function PlannerClient({ initialPlans }: Props) {
 
             <button
               onClick={handleCreate}
-              disabled={!startDate || !endDate}
+              disabled={isPending || !startDate || !endDate}
               className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 active:bg-green-700"
             >
-              Create Plan
+              {isPending ? 'Creating…' : 'Create Plan'}
             </button>
           </div>
         </>
