@@ -6,13 +6,13 @@ truncate table meal_plans cascade;
 
 -- meal_plans: replace week_start_date with start_date + end_date
 alter table meal_plans
-  drop constraint meal_plans_household_id_week_start_date_key,
+  drop constraint if exists meal_plans_household_id_week_start_date_key,
   drop column week_start_date,
   add column start_date date not null,
   add column end_date   date not null;
 
 -- meal_plan_recipes: replace day_of_week with plan_date
 alter table meal_plan_recipes
-  drop constraint meal_plan_recipes_day_of_week_check,
+  drop constraint if exists meal_plan_recipes_day_of_week_check,
   drop column day_of_week,
   add column plan_date date not null;
