@@ -35,7 +35,8 @@ export interface RecipeEditInput {
 export interface MealPlan {
   id: string
   household_id: string
-  week_start_date: string
+  start_date: string
+  end_date: string
   created_at: string
 }
 
@@ -43,7 +44,7 @@ export interface SlotWithRecipe {
   id: string
   meal_plan_id: string
   recipe_id: string
-  day_of_week: number
+  plan_date: string
   servings_override: number | null
   position: number
   recipe: {
