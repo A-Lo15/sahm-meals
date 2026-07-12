@@ -4,15 +4,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Recipe } from '@/lib/types'
 
-function getThisMonday(): string {
-  const today = new Date()
-  const day = today.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diff)
-  return monday.toISOString().split('T')[0]
-}
-
 const STATE_BADGE: Record<string, { label: string; cls: string }> = {
   tried: { label: 'Tried', cls: 'bg-gray-100 text-gray-600' },
   saved: { label: 'Saved', cls: 'bg-blue-100 text-blue-700' },
@@ -44,27 +35,7 @@ export default async function RecipesPage({
   let recipes: Recipe[] = []
 
   if (householdId) {
-    if (tab === 'this-week') {
-      const { data: plan } = await db
-        .from('meal_plans')
-        .select('id')
-        .eq('household_id', householdId)
-        .eq('week_start_date', getThisMonday())
-        .maybeSingle()
-
-      if (plan) {
-        const { data: slots } = await db
-          .from('meal_plan_recipes')
-          .select('recipe_id')
-          .eq('meal_plan_id', plan.id)
-
-        const ids = (slots ?? []).map((s: { recipe_id: string }) => s.recipe_id)
-        if (ids.length > 0) {
-          const { data } = await db.from('recipes').select('*').in('id', ids).eq('in_library', true)
-          recipes = (data as Recipe[]) ?? []
-        }
-      }
-    } else if (tab === 'history') {
+    if (tab === 'history') {
       const { data } = await db
         .from('recipes')
         .select('*')
@@ -86,17 +57,11 @@ export default async function RecipesPage({
 
   const tabs = [
     { id: 'library', label: 'Library' },
-    { id: 'this-week', label: 'This Week' },
     { id: 'history', label: 'History' },
   ]
 
-  const emptyIcon = tab === 'this-week' ? '📅' : tab === 'history' ? '📜' : '📚'
-  const emptyMessage =
-    tab === 'this-week'
-      ? 'No meals planned this week'
-      : tab === 'history'
-      ? 'No recipes yet'
-      : 'Your library is empty'
+  const emptyIcon = tab === 'history' ? '📜' : '📚'
+  const emptyMessage = tab === 'history' ? 'No recipes yet' : 'Your library is empty'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -139,14 +104,12 @@ export default async function RecipesPage({
           <div className="text-center py-16">
             <div className="text-4xl mb-3">{emptyIcon}</div>
             <p className="font-medium text-gray-600">{emptyMessage}</p>
-            {tab !== 'this-week' && (
-              <Link
-                href="/recipes/new"
-                className="mt-4 inline-block px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium"
-              >
-                Add a recipe
-              </Link>
-            )}
+            <Link
+              href="/recipes/new"
+              className="mt-4 inline-block px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium"
+            >
+              Add a recipe
+            </Link>
           </div>
         ) : (
           recipes.map((recipe) => {

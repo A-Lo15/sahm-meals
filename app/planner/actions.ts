@@ -131,13 +131,21 @@ export async function removeSlot(slotId: string): Promise<void> {
 }
 
 export async function updateSlotServings(slotId: string, servings: number): Promise<void> {
-  const { db } = await getContext()
+  const { db, householdId } = await getContext()
+
+  const { data: slot } = await db
+    .from('meal_plan_recipes')
+    .select('id, meal_plans!inner(household_id)')
+    .eq('id', slotId)
+    .eq('meal_plans.household_id', householdId)
+    .single()
+
+  if (!slot) return
+
   await db
     .from('meal_plan_recipes')
     .update({ servings_override: servings })
     .eq('id', slotId)
-  // Note: optimistic UI updates servings client-side; revalidatePath ensures
-  // server state stays consistent for page refreshes
   revalidatePath('/planner')
 }
 
@@ -370,6 +378,15 @@ export async function updateRecipe(recipeId: string, input: RecipeEditInput): Pr
 
 export async function removeSlotAndRecipe(slotId: string, recipeId: string): Promise<void> {
   const { db, householdId } = await getContext()
+
+  const { data: slot } = await db
+    .from('meal_plan_recipes')
+    .select('id, meal_plans!inner(household_id)')
+    .eq('id', slotId)
+    .eq('meal_plans.household_id', householdId)
+    .single()
+
+  if (!slot) return
 
   const { error: slotDeleteError } = await db
     .from('meal_plan_recipes')
