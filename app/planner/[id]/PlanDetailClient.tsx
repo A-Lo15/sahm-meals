@@ -64,7 +64,6 @@ export default function PlanDetailClient({
   initialSlots,
   recipes,
 }: Props) {
-  const router = useRouter()
   const [slots, setSlots] = useState<OptimisticSlot[]>(initialSlots)
   const [, startTransition] = useTransition()
   const [pickerDate, setPickerDate] = useState<string | null>(null)
