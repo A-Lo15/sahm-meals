@@ -174,7 +174,7 @@ function extractJsonLd(html: string): ParsedRecipe | null {
 
 async function resolvePinterest(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': BROWSER_UA },
+    headers: BROWSER_HEADERS,
     redirect: 'follow',
   })
   const html = await res.text()
@@ -200,8 +200,27 @@ async function resolvePinterest(url: string): Promise<string> {
 
 // ─── Claude Haiku fallback ────────────────────────────────────────────────────
 
-const BROWSER_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'max-age=0',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+}
+
+// Cloudflare and similar services return a JS challenge page when they block a request.
+// Detect it early so we can give a useful error rather than "no recipe found".
+function isBotChallenge(html: string): boolean {
+  return (
+    /cf-browser-verification|cf-challenge|jschl[-_]answer|checking your browser/i.test(html) ||
+    (/cloudflare/i.test(html) && html.length < 10000)
+  )
+}
 
 function stripHtml(html: string): string {
   return html
@@ -268,10 +287,8 @@ export async function parseRecipeUrl(
   }
 
   const res = await fetch(targetUrl, {
-    headers: {
-      'User-Agent': BROWSER_UA,
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
+    headers: BROWSER_HEADERS,
+    redirect: 'follow',
   })
 
   if (!res.ok) {
@@ -281,6 +298,12 @@ export async function parseRecipeUrl(
   }
 
   const html = await res.text()
+
+  if (isBotChallenge(html)) {
+    throw new Error(
+      'This website is blocking automated access. Try opening the recipe page in your browser and copying the URL from there, or use a direct link instead of one shared from Pinterest.'
+    )
+  }
 
   const jsonLd = extractJsonLd(html)
   if (jsonLd) {
