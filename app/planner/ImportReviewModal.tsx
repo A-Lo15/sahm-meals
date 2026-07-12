@@ -7,21 +7,22 @@ import type { Ingredient } from '@/lib/types'
 
 type IngredientWithKey = Ingredient & { _key: string }
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
 interface ImportReviewModalProps {
   recipe: ParsedRecipe
-  day: number
+  planDate: string
   onConfirm: (edited: ParsedRecipe) => void
   onDismiss: () => void
 }
 
 export default function ImportReviewModal({
   recipe,
-  day,
+  planDate,
   onConfirm,
   onDismiss,
 }: ImportReviewModalProps) {
+  const dateLabel = new Date(planDate + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
   const [title, setTitle] = useState(recipe.title)
   const [servings, setServings] = useState(recipe.default_servings)
   const [ingredients, setIngredients] = useState<IngredientWithKey[]>(() =>
@@ -180,7 +181,7 @@ export default function ImportReviewModal({
           disabled={!title.trim()}
           className="flex-1 py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-50 active:bg-green-700"
         >
-          Add to {DAYS[day]}
+          Add to {dateLabel}
         </button>
       </div>
     </div>

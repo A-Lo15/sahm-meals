@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import type { IngredientCategory, CustomMealInput } from '@/lib/types'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const CATEGORIES: IngredientCategory[] = [
   'produce', 'dairy', 'meat', 'pantry', 'frozen', 'household', 'other',
 ]
@@ -17,12 +16,15 @@ interface IngredientRow {
 }
 
 interface Props {
-  dayOfWeek: number
+  planDate: string
   onClose: () => void
   onSave: (input: CustomMealInput) => void
 }
 
-export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
+export default function CustomMealSheet({ planDate, onClose, onSave }: Props) {
+  const dateLabel = new Date(planDate + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
   const [title, setTitle] = useState('')
   const [servings, setServings] = useState(4)
   const [saveToLibrary, setSaveToLibrary] = useState(false)
@@ -69,7 +71,7 @@ export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
           <div className="w-10 h-1 bg-gray-300 rounded-full mb-3" />
           <div className="flex items-center justify-between w-full">
             <h2 className="font-semibold text-gray-900 text-base">
-              Custom meal — {DAYS[dayOfWeek]}
+              Custom meal — {dateLabel}
             </h2>
             <button onClick={onClose} className="text-gray-400 text-sm">
               Cancel
@@ -186,7 +188,7 @@ export default function CustomMealSheet({ dayOfWeek, onClose, onSave }: Props) {
             disabled={!canSave}
             className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 active:bg-green-700"
           >
-            Add to {DAYS[dayOfWeek]}
+            Add to {dateLabel}
           </button>
         </div>
       </div>
