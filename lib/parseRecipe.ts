@@ -301,7 +301,7 @@ export async function parseRecipeUrl(
 
   if (isBotChallenge(html)) {
     throw new Error(
-      'This website is blocking automated access. Try opening the recipe page in your browser and copying the URL from there, or use a direct link instead of one shared from Pinterest.'
+      "We couldn't load this recipe — the website is blocking us. Try opening the recipe directly in Safari or Chrome, then copy the URL from the address bar and paste that instead."
     )
   }
 
