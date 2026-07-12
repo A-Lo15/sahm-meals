@@ -27,9 +27,9 @@ export default async function Home() {
         <Link href="/planner" className="block">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 active:bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-800 mb-1">
-              This Week
+              Meal Plans
             </h2>
-            <p className="text-gray-400 text-sm">Tap to plan your week →</p>
+            <p className="text-gray-400 text-sm">Plan your meals →</p>
           </div>
         </Link>
 
@@ -45,7 +45,7 @@ export default async function Home() {
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 active:bg-gray-50">
               <div className="text-2xl mb-2">🛒</div>
               <h3 className="font-semibold text-gray-800">Shopping</h3>
-              <p className="text-xs text-gray-400 mt-0.5">This week&apos;s list</p>
+              <p className="text-xs text-gray-400 mt-0.5">Pick a plan to shop</p>
             </div>
           </Link>
         </div>
