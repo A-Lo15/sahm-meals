@@ -54,8 +54,20 @@ const UNIT_RE = new RegExp(
 )
 const NUM_RE = /^([\d¼½¾⅓⅔⅛⅜⅝⅞][\d./⁄-]*)\s+(.+)$/
 
+// Matches "1 (15 oz) can X" or "(15 oz) can X" — recipe sites often encode the
+// unit as a parenthetical alongside a count. Unwrap it so UNIT_RE can parse normally.
+const PAREN_QTY_RE = new RegExp(
+  `^(?:[\\d¼½¾⅓⅔⅛⅜⅝⅞][\\d\\s./⁄-]*\\s+)?\\(([\\d¼½¾⅓⅔⅛⅜⅝⅞][\\d./⁄-]*)\\s+(${UNIT_LIST.join('|')})\\)\\s*(.*)`,
+  'i'
+)
+
 function parseIngredient(raw: string): Ingredient {
   const text = raw.trim()
+
+  const parenMatch = text.match(PAREN_QTY_RE)
+  if (parenMatch) {
+    return parseIngredient(`${parenMatch[1]} ${parenMatch[2]} ${parenMatch[3]}`.trim())
+  }
 
   const unitMatch = text.match(UNIT_RE)
   if (unitMatch) {
