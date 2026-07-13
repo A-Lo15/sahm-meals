@@ -512,15 +512,15 @@ export default function ShoppingClient({
           {/* All tab content */}
           {activeTab === 'all' && (
             <div className="max-w-lg mx-auto px-4 py-4">
-              {allTotal === 0 && staples.size === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-12">Nothing here</p>
-              ) : (
-                (() => {
+              {(() => {
                   const allEntries: Array<{ item: ShoppingItem; storeName: string }> = []
                   for (const store of stores) {
                     for (const item of assignments[store.name] ?? []) {
                       allEntries.push({ item, storeName: store.name })
                     }
+                  }
+                  if (allEntries.length === 0) {
+                    return <p className="text-center text-sm text-gray-400 py-12">Nothing here</p>
                   }
                   const visibleEntries = allEntries.filter(({ item }) => !staples.has(normalizeName(item.name)))
                   const suppressedEntries = allEntries.filter(({ item }) => staples.has(normalizeName(item.name)))
@@ -624,8 +624,7 @@ export default function ShoppingClient({
                       )}
                     </div>
                   )
-                })()
-              )}
+                })()}
             </div>
           )}
 
