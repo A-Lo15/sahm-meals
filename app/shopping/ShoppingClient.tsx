@@ -656,7 +656,7 @@ export default function ShoppingClient({
                             {CATEGORY_LABELS[cat] ?? cat}
                           </p>
                           <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-                            {items.map((item, idx) => {
+                            {items.map((item) => {
                               const globalIdx = globalIdxMap.get(item)!
                               const rowKey = `${activeTab}-${globalIdx}`
                               const isOpen = swipeOpenKey === rowKey
