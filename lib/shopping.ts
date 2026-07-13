@@ -121,7 +121,7 @@ export function weightFromCanonical(grams: number): { qty: number; unit: string 
 
 const STEM_EXCEPTIONS = new Set(['molasses', 'series'])
 
-function normalizeName(raw: string): string {
+export function normalizeName(raw: string): string {
   const s = raw.toLowerCase().trim()
   if (STEM_EXCEPTIONS.has(s)) return s
   if (s.endsWith('ies') && s.length > 4) return s.slice(0, -3) + 'y'
