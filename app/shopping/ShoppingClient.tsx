@@ -375,8 +375,8 @@ export default function ShoppingClient({
   const totalCount = (store: string) =>
     assignments?.[store]?.filter(i => !staples.has(normalizeName(i.name))).length ?? 0
 
-  const allTotal = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.length ?? 0), 0)
-  const allUnchecked = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !i.checked).length ?? 0), 0)
+  const allTotal = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !staples.has(normalizeName(i.name))).length ?? 0), 0)
+  const allUnchecked = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !i.checked && !staples.has(normalizeName(i.name))).length ?? 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -512,7 +512,7 @@ export default function ShoppingClient({
           {/* All tab content */}
           {activeTab === 'all' && (
             <div className="max-w-lg mx-auto px-4 py-4">
-              {allTotal === 0 ? (
+              {allTotal === 0 && staples.size === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-12">Nothing here</p>
               ) : (
                 (() => {
@@ -522,8 +522,11 @@ export default function ShoppingClient({
                       allEntries.push({ item, storeName: store.name })
                     }
                   }
+                  const visibleEntries = allEntries.filter(({ item }) => !staples.has(normalizeName(item.name)))
+                  const suppressedEntries = allEntries.filter(({ item }) => staples.has(normalizeName(item.name)))
+
                   const groupMap = new Map<string, Array<{ item: ShoppingItem; storeName: string }>>()
-                  for (const entry of allEntries) {
+                  for (const entry of visibleEntries) {
                     const cat = entry.item.category || 'other'
                     if (!groupMap.has(cat)) groupMap.set(cat, [])
                     groupMap.get(cat)!.push(entry)
@@ -558,6 +561,13 @@ export default function ShoppingClient({
                                     </span>
                                   )}
                                   <button
+                                    onClick={() => handleMarkStaple(item.name)}
+                                    className="text-gray-300 active:text-gray-500 flex-shrink-0 text-base leading-none"
+                                    aria-label={`Mark ${item.name} as pantry staple`}
+                                  >
+                                    ⌂
+                                  </button>
+                                  <button
                                     onClick={() => setRerouteTarget({ item, fromStore: storeName })}
                                     className={`text-xs font-bold px-2 py-1 rounded-md flex-shrink-0 ${storeColorClass(storeName)}`}
                                   >
@@ -569,6 +579,49 @@ export default function ShoppingClient({
                           </div>
                         </div>
                       ))}
+
+                      {/* I have these — collapsible suppressed section */}
+                      {suppressedEntries.length > 0 && (
+                        <div>
+                          <button
+                            onClick={() => setStaplesExpanded(e => !e)}
+                            className="w-full flex items-center justify-between px-1 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                          >
+                            <span>I have these ({suppressedEntries.length})</span>
+                            <span>{staplesExpanded ? '▾' : '▸'}</span>
+                          </button>
+                          {staplesExpanded && (
+                            <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden mt-1">
+                              {suppressedEntries.map(({ item, storeName }) => {
+                                const abbr = stores.find(s => s.name === storeName)?.abbreviation ?? storeName
+                                return (
+                                  <div key={`${storeName}-${item.name}`} className="flex items-center gap-3 px-4 py-3.5">
+                                    <span className="flex-1 text-sm text-gray-400">{item.name}</span>
+                                    {(item.quantity || item.unit) && (
+                                      <span className="text-sm text-gray-300 flex-shrink-0">
+                                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => handleUnmarkStaple(item.name)}
+                                      className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-gray-100 flex-shrink-0 active:bg-gray-200"
+                                      aria-label={`Remove ${item.name} from pantry staples`}
+                                    >
+                                      Unmark
+                                    </button>
+                                    <button
+                                      onClick={() => setRerouteTarget({ item, fromStore: storeName })}
+                                      className={`text-xs font-bold px-2 py-1 rounded-md flex-shrink-0 ${storeColorClass(storeName)}`}
+                                    >
+                                      {abbr} ›
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })()
