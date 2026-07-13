@@ -30,6 +30,13 @@ export default async function ShoppingPage({
   const householdId = userData?.household_id as string | undefined
   if (!householdId) redirect('/login')
 
+  const { data: householdData } = await db
+    .from('households')
+    .select('pantry_staples')
+    .eq('id', householdId)
+    .single()
+  const initialStaples = (householdData?.pantry_staples as string[] | null) ?? []
+
   // Verify the plan belongs to this household
   const { data: plan } = await db
     .from('meal_plans')
@@ -57,7 +64,7 @@ export default async function ShoppingPage({
       hasMeals={hasMeals}
       initialManualItems={existing?.manualItems ?? []}
       initialStores={existing?.stores ?? []}
-      initialStaples={existing?.pantryStaples ?? []}
+      initialStaples={initialStaples}
     />
   )
 }

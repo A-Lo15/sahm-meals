@@ -159,6 +159,7 @@ export default function ShoppingClient({
       setGeneratedAt(result.generatedAt)
       setManualItems(result.manualItems)
       setStores(result.stores)
+      setStaples(new Set(result.pantryStaples ?? []))
       setActiveTab(prev =>
         prev === 'all' || result.stores.some(s => s.name === prev)
           ? prev
@@ -194,6 +195,7 @@ export default function ShoppingClient({
       setGeneratedAt(result.generatedAt)
       setManualItems(result.manualItems)
       setStores(result.stores)
+      setStaples(new Set(result.pantryStaples ?? []))
       setActiveTab(prev =>
         prev === 'all' || result.stores.some(s => s.name === prev)
           ? prev
