@@ -3,8 +3,8 @@
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { generateShoppingList, saveCheckedState, saveManualItems, resolveAndGenerateList, type ResolvedConflict, type GenerateResult } from './actions'
-import { CATEGORY_ORDER, type StoreAssignments, type ShoppingItem, type ManualItem, type UnitPreferences } from '@/lib/shopping'
+import { generateShoppingList, saveCheckedState, saveManualItems, resolveAndGenerateList, addPantryStaple, removePantryStaple, type ResolvedConflict, type GenerateResult } from './actions'
+import { normalizeName, CATEGORY_ORDER, type StoreAssignments, type ShoppingItem, type ManualItem, type UnitPreferences } from '@/lib/shopping'
 import type { IngredientCategory } from '@/lib/types'
 import { type Store } from '@/lib/stores'
 
@@ -38,6 +38,7 @@ interface Props {
   hasMeals: boolean
   initialManualItems: ManualItem[]
   initialStores: Store[]
+  initialStaples: string[]
 }
 
 export default function ShoppingClient({
@@ -48,6 +49,7 @@ export default function ShoppingClient({
   hasMeals,
   initialManualItems,
   initialStores,
+  initialStaples,
 }: Props) {
   const router = useRouter()
   const [listId, setListId] = useState(initialListId)
@@ -64,6 +66,8 @@ export default function ShoppingClient({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [manualItems, setManualItems] = useState<ManualItem[]>(initialManualItems)
+  const [staples, setStaples] = useState<Set<string>>(() => new Set(initialStaples))
+  const [staplesExpanded, setStaplesExpanded] = useState(false)
 
   // Add-item bottom sheet state
   const [addSheetOpen, setAddSheetOpen] = useState(false)
@@ -107,6 +111,22 @@ export default function ShoppingClient({
   function storeColorClass(storeName: string): string {
     const idx = stores.findIndex(s => s.name === storeName)
     return BADGE_COLORS[idx < 0 ? 0 : idx % BADGE_COLORS.length]!
+  }
+
+  function handleMarkStaple(rawName: string) {
+    const normalized = normalizeName(rawName)
+    setStaples(prev => new Set(Array.from(prev).concat(normalized)))
+    startTransition(() => addPantryStaple(rawName))
+  }
+
+  function handleUnmarkStaple(rawName: string) {
+    const normalized = normalizeName(rawName)
+    setStaples(prev => {
+      const next = new Set(prev)
+      next.delete(normalized)
+      return next
+    })
+    startTransition(() => removePantryStaple(rawName))
   }
 
   function handleGenerate() {
@@ -345,9 +365,10 @@ export default function ShoppingClient({
   }
 
   const uncheckedCount = (store: string) =>
-    assignments?.[store]?.filter((i) => !i.checked).length ?? 0
+    assignments?.[store]?.filter((i) => !i.checked && !staples.has(normalizeName(i.name))).length ?? 0
 
-  const totalCount = (store: string) => assignments?.[store]?.length ?? 0
+  const totalCount = (store: string) =>
+    assignments?.[store]?.filter(i => !staples.has(normalizeName(i.name))).length ?? 0
 
   const allTotal = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.length ?? 0), 0)
   const allUnchecked = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !i.checked).length ?? 0), 0)
@@ -557,12 +578,19 @@ export default function ShoppingClient({
                 <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
               ) : (
                 (() => {
-                  const groups = groupByCategory(assignments[activeTab] ?? [])
+                  const allItems = assignments[activeTab] ?? []
                   const globalIdxMap = new Map<ShoppingItem, number>(
-                    (assignments[activeTab] ?? []).map((item, i) => [item, i])
+                    allItems.map((item, i) => [item, i])
                   )
+                  const visible = allItems.filter(item => !staples.has(normalizeName(item.name)))
+                  const suppressed = allItems.filter(item => staples.has(normalizeName(item.name)))
+                  const groups = groupByCategory(visible)
+
                   return (
                     <div className="space-y-4">
+                      {visible.length === 0 && suppressed.length === 0 && (
+                        <p className="text-center text-sm text-gray-400 py-12">Nothing needed here</p>
+                      )}
                       {Array.from(groups.entries()).map(([cat, items]) => (
                         <div key={cat}>
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
@@ -583,7 +611,6 @@ export default function ShoppingClient({
                                       transition: 'transform 0.2s ease',
                                     }}
                                     onTouchStart={(e) => {
-                                      // Snap any currently-open row closed before starting a new drag
                                       if (swipeOpenKey !== null && swipeOpenKey !== rowKey) {
                                         setSwipeOpenKey(null)
                                       }
@@ -612,16 +639,13 @@ export default function ShoppingClient({
                                       const deltaX = e.changedTouches[0].clientX - touchStartX.current
                                       isDragging.current = false
                                       dragKey.current = null
-
                                       if (dragRowRef.current) {
                                         dragRowRef.current.style.transition = 'transform 0.2s ease'
                                       }
                                       dragRowRef.current = null
-
                                       if (deltaX < -40) {
                                         setSwipeOpenKey(rowKey)
                                       } else {
-                                        // Snap back — if this row was already open, keep it open
                                         if (!isOpen) {
                                           const el = e.currentTarget as HTMLDivElement
                                           el.style.transform = 'translateX(0)'
@@ -639,38 +663,47 @@ export default function ShoppingClient({
                                       dragRowRef.current = null
                                     }}
                                   >
-                                    <button
-                                      onClick={() => {
-                                        if (isOpen) {
-                                          setSwipeOpenKey(null)
-                                        } else {
-                                          toggleItem(activeTab, globalIdx)
-                                        }
-                                      }}
-                                      className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 text-left"
-                                    >
-                                      <span
-                                        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
-                                          item.checked
-                                            ? 'bg-green-500 border-green-500 text-white'
-                                            : 'border-gray-300'
-                                        }`}
+                                    <div className="flex items-center">
+                                      <button
+                                        onClick={() => {
+                                          if (isOpen) {
+                                            setSwipeOpenKey(null)
+                                          } else {
+                                            toggleItem(activeTab, globalIdx)
+                                          }
+                                        }}
+                                        className="flex-1 flex items-center gap-3 pl-4 pr-2 py-3.5 active:bg-gray-50 text-left"
                                       >
-                                        {item.checked ? '✓' : ''}
-                                      </span>
-                                      <span
-                                        className={`flex-1 text-sm ${
-                                          item.checked ? 'line-through text-gray-400' : 'text-gray-800'
-                                        }`}
-                                      >
-                                        {item.name}
-                                      </span>
-                                      {(item.quantity || item.unit) && (
-                                        <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
-                                          {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                        <span
+                                          className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
+                                            item.checked
+                                              ? 'bg-green-500 border-green-500 text-white'
+                                              : 'border-gray-300'
+                                          }`}
+                                        >
+                                          {item.checked ? '✓' : ''}
                                         </span>
-                                      )}
-                                    </button>
+                                        <span
+                                          className={`flex-1 text-sm ${
+                                            item.checked ? 'line-through text-gray-400' : 'text-gray-800'
+                                          }`}
+                                        >
+                                          {item.name}
+                                        </span>
+                                        {(item.quantity || item.unit) && (
+                                          <span className={`text-sm flex-shrink-0 ${item.checked ? 'text-gray-300' : 'text-gray-500'}`}>
+                                            {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                          </span>
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={() => handleMarkStaple(item.name)}
+                                        className="pr-4 pl-2 py-3.5 text-gray-300 active:text-gray-500 flex-shrink-0 text-base leading-none"
+                                        aria-label={`Mark ${item.name} as pantry staple`}
+                                      >
+                                        ⌂
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {/* Remove button — revealed when content slides left */}
@@ -689,6 +722,52 @@ export default function ShoppingClient({
                           </div>
                         </div>
                       ))}
+
+                      {/* I have these — collapsible suppressed section */}
+                      {suppressed.length > 0 && (
+                        <div>
+                          <button
+                            onClick={() => setStaplesExpanded(e => !e)}
+                            className="w-full flex items-center justify-between px-1 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                          >
+                            <span>I have these ({suppressed.length})</span>
+                            <span>{staplesExpanded ? '▾' : '▸'}</span>
+                          </button>
+                          {staplesExpanded && (
+                            <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden mt-1">
+                              {suppressed.map((item) => {
+                                const globalIdx = globalIdxMap.get(item) ?? 0
+                                return (
+                                  <div key={item.name} className="flex items-center gap-3 px-4 py-3.5">
+                                    <button
+                                      onClick={() => toggleItem(activeTab, globalIdx)}
+                                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
+                                        item.checked
+                                          ? 'bg-green-500 border-green-500 text-white'
+                                          : 'border-gray-200'
+                                      }`}
+                                    >
+                                      {item.checked ? '✓' : ''}
+                                    </button>
+                                    <span className="flex-1 text-sm text-gray-400">{item.name}</span>
+                                    {(item.quantity || item.unit) && (
+                                      <span className="text-sm text-gray-300 flex-shrink-0">
+                                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => handleUnmarkStaple(item.name)}
+                                      className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-gray-100 flex-shrink-0 active:bg-gray-200"
+                                    >
+                                      Unmark
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })()

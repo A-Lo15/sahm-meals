@@ -57,6 +57,7 @@ export default async function ShoppingPage({
       hasMeals={hasMeals}
       initialManualItems={existing?.manualItems ?? []}
       initialStores={existing?.stores ?? []}
+      initialStaples={existing?.pantryStaples ?? []}
     />
   )
 }
