@@ -97,6 +97,7 @@ export default function ShoppingClient({
   const isDragging = useRef<boolean>(false)
   const dragKey = useRef<string | null>(null)
   const dragRowRef = useRef<HTMLDivElement | null>(null)
+  const touchMoved = useRef<boolean>(false)
 
   // Cleanup on unmount — prevents writing to detached DOM nodes after navigation
   useEffect(() => {
@@ -108,6 +109,10 @@ export default function ShoppingClient({
     }
   }, [])
 
+  useEffect(() => {
+    setStaplesExpanded(false)
+  }, [activeTab])
+
   function storeColorClass(storeName: string): string {
     const idx = stores.findIndex(s => s.name === storeName)
     return BADGE_COLORS[idx < 0 ? 0 : idx % BADGE_COLORS.length]!
@@ -116,17 +121,17 @@ export default function ShoppingClient({
   function handleMarkStaple(rawName: string) {
     const normalized = normalizeName(rawName)
     setStaples(prev => new Set(Array.from(prev).concat(normalized)))
-    startTransition(() => addPantryStaple(rawName))
+    addPantryStaple(rawName).catch(() => {
+      setStaples(prev => { const next = new Set(prev); next.delete(normalized); return next })
+    })
   }
 
   function handleUnmarkStaple(rawName: string) {
     const normalized = normalizeName(rawName)
-    setStaples(prev => {
-      const next = new Set(prev)
-      next.delete(normalized)
-      return next
+    setStaples(prev => { const next = new Set(prev); next.delete(normalized); return next })
+    removePantryStaple(rawName).catch(() => {
+      setStaples(prev => new Set(Array.from(prev).concat(normalized)))
     })
-    startTransition(() => removePantryStaple(rawName))
   }
 
   function handleGenerate() {
@@ -598,12 +603,12 @@ export default function ShoppingClient({
                           </p>
                           <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                             {items.map((item, idx) => {
-                              const globalIdx = globalIdxMap.get(item) ?? 0
+                              const globalIdx = globalIdxMap.get(item)!
                               const rowKey = `${activeTab}-${globalIdx}`
                               const isOpen = swipeOpenKey === rowKey
 
                               return (
-                                <div key={idx} className="relative overflow-hidden">
+                                <div key={item.name} className="relative overflow-hidden">
                                   {/* Sliding row content */}
                                   <div
                                     style={{
@@ -615,6 +620,7 @@ export default function ShoppingClient({
                                         setSwipeOpenKey(null)
                                       }
                                       touchStartX.current = e.touches[0].clientX
+                                      touchMoved.current = false
                                       isDragging.current = true
                                       dragKey.current = rowKey
                                       dragRowRef.current = e.currentTarget as HTMLDivElement
@@ -628,6 +634,7 @@ export default function ShoppingClient({
                                     onTouchMove={(e) => {
                                       if (!isDragging.current || dragKey.current !== rowKey) return
                                       const deltaX = e.touches[0].clientX - touchStartX.current
+                                      if (Math.abs(deltaX) > 5) touchMoved.current = true
                                       if (deltaX >= 0) return
                                       const clamped = Math.max(-REMOVE_BTN_WIDTH, deltaX)
                                       if (dragRowRef.current) {
@@ -697,7 +704,10 @@ export default function ShoppingClient({
                                         )}
                                       </button>
                                       <button
-                                        onClick={() => handleMarkStaple(item.name)}
+                                        onClick={() => {
+                                          if (touchMoved.current) { touchMoved.current = false; return }
+                                          handleMarkStaple(item.name)
+                                        }}
                                         className="pr-4 pl-2 py-3.5 text-gray-300 active:text-gray-500 flex-shrink-0 text-base leading-none"
                                         aria-label={`Mark ${item.name} as pantry staple`}
                                       >
@@ -736,11 +746,12 @@ export default function ShoppingClient({
                           {staplesExpanded && (
                             <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden mt-1">
                               {suppressed.map((item) => {
-                                const globalIdx = globalIdxMap.get(item) ?? 0
+                                const globalIdx = globalIdxMap.get(item)!
                                 return (
                                   <div key={item.name} className="flex items-center gap-3 px-4 py-3.5">
                                     <button
                                       onClick={() => toggleItem(activeTab, globalIdx)}
+                                      aria-label={item.checked ? `Uncheck ${item.name}` : `Check ${item.name}`}
                                       className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs ${
                                         item.checked
                                           ? 'bg-green-500 border-green-500 text-white'
@@ -757,6 +768,7 @@ export default function ShoppingClient({
                                     )}
                                     <button
                                       onClick={() => handleUnmarkStaple(item.name)}
+                                      aria-label={`Remove ${item.name} from pantry staples`}
                                       className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-gray-100 flex-shrink-0 active:bg-gray-200"
                                     >
                                       Unmark
