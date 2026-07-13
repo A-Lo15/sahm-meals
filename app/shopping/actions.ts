@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import {
+  normalizeName,
   buildStoreAssignments,
   formatQty,
   volumeFromCanonical,
@@ -165,6 +166,7 @@ export interface ShoppingListData {
   mealPlanId: string
   manualItems: ManualItem[]
   stores: Store[]
+  pantryStaples: string[]
 }
 
 export interface ResolvedConflictOption {
@@ -188,7 +190,8 @@ async function _buildAndSaveList(
   db: ReturnType<typeof createAdminClient>,
   householdId: string,
   mealPlanId: string,
-  unitPreferences: UnitPreferences
+  unitPreferences: UnitPreferences,
+  pantryStaples: string[]
 ): Promise<ShoppingListData | null> {
   const stores = await loadStores(db, householdId)
 
@@ -283,6 +286,7 @@ async function _buildAndSaveList(
     mealPlanId,
     manualItems,
     stores,
+    pantryStaples,
   }
 }
 
@@ -292,10 +296,11 @@ export async function generateShoppingList(mealPlanId: string): Promise<Generate
   // Load stored unit preferences
   const { data: household } = await db
     .from('households')
-    .select('preferences')
+    .select('preferences, pantry_staples')
     .eq('id', householdId)
     .single()
 
+  const pantryStaples: string[] = (household?.pantry_staples as string[] | null) ?? []
   const storedPrefs = (household?.preferences as Record<string, unknown>) ?? {}
   const unitPreferences: UnitPreferences =
     (storedPrefs.unit_preferences as UnitPreferences) ?? {}
@@ -350,7 +355,7 @@ export async function generateShoppingList(mealPlanId: string): Promise<Generate
     return { type: 'conflicts', conflicts: resolvedConflicts, suggestions }
   }
 
-  const result = await _buildAndSaveList(db, householdId, mealPlanId, unitPreferences)
+  const result = await _buildAndSaveList(db, householdId, mealPlanId, unitPreferences, pantryStaples)
   if (!result) return null
   return { type: 'success', ...result }
 }
@@ -364,10 +369,11 @@ export async function resolveAndGenerateList(
   // Merge new preferences into existing stored preferences
   const { data: household } = await db
     .from('households')
-    .select('preferences')
+    .select('preferences, pantry_staples')
     .eq('id', householdId)
     .single()
 
+  const pantryStaples: string[] = (household?.pantry_staples as string[] | null) ?? []
   const currentPrefs = (household?.preferences as Record<string, unknown>) ?? {}
   const currentUnitPrefs = (currentPrefs.unit_preferences as UnitPreferences) ?? {}
   const mergedUnitPrefs: UnitPreferences = { ...currentUnitPrefs, ...newPreferences }
@@ -379,12 +385,19 @@ export async function resolveAndGenerateList(
     .eq('id', householdId)
   if (prefSaveError) console.error('Failed to save unit preferences:', prefSaveError)
 
-  return _buildAndSaveList(db, householdId, mealPlanId, mergedUnitPrefs)
+  return _buildAndSaveList(db, householdId, mealPlanId, mergedUnitPrefs, pantryStaples)
 }
 
 export async function loadShoppingList(mealPlanId: string): Promise<ShoppingListData | null> {
   const { db, householdId } = await getContext()
   const stores = await loadStores(db, householdId)
+
+  const { data: household } = await db
+    .from('households')
+    .select('pantry_staples')
+    .eq('id', householdId)
+    .single()
+  const pantryStaples: string[] = (household?.pantry_staples as string[] | null) ?? []
 
   const { data: plan } = await db
     .from('meal_plans')
@@ -440,6 +453,7 @@ export async function loadShoppingList(mealPlanId: string): Promise<ShoppingList
     mealPlanId,
     manualItems,
     stores,
+    pantryStaples,
   }
 }
 
@@ -463,4 +477,41 @@ export async function saveManualItems(
     .from('shopping_lists')
     .update({ manual_overrides: { added: items } })
     .eq('id', listId)
+}
+
+export async function addPantryStaple(rawName: string): Promise<void> {
+  const { db, householdId } = await getContext()
+  const normalized = normalizeName(rawName)
+
+  const { data } = await db
+    .from('households')
+    .select('pantry_staples')
+    .eq('id', householdId)
+    .single()
+
+  const current: string[] = (data?.pantry_staples as string[] | null) ?? []
+  if (current.includes(normalized)) return
+
+  await db
+    .from('households')
+    .update({ pantry_staples: [...current, normalized] })
+    .eq('id', householdId)
+}
+
+export async function removePantryStaple(rawName: string): Promise<void> {
+  const { db, householdId } = await getContext()
+  const normalized = normalizeName(rawName)
+
+  const { data } = await db
+    .from('households')
+    .select('pantry_staples')
+    .eq('id', householdId)
+    .single()
+
+  const current: string[] = (data?.pantry_staples as string[] | null) ?? []
+
+  await db
+    .from('households')
+    .update({ pantry_staples: current.filter(s => s !== normalized) })
+    .eq('id', householdId)
 }
