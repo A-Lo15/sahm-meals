@@ -492,10 +492,11 @@ export async function addPantryStaple(rawName: string): Promise<void> {
   const current: string[] = (data?.pantry_staples as string[] | null) ?? []
   if (current.includes(normalized)) return
 
-  await db
+  const { error } = await db
     .from('households')
     .update({ pantry_staples: [...current, normalized] })
     .eq('id', householdId)
+  if (error) throw error
 }
 
 export async function removePantryStaple(rawName: string): Promise<void> {
@@ -510,8 +511,9 @@ export async function removePantryStaple(rawName: string): Promise<void> {
 
   const current: string[] = (data?.pantry_staples as string[] | null) ?? []
 
-  await db
+  const { error } = await db
     .from('households')
     .update({ pantry_staples: current.filter(s => s !== normalized) })
     .eq('id', householdId)
+  if (error) throw error
 }
