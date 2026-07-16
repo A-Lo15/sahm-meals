@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import StateControls from './StateControls'
 import RecipeIngredients from './RecipeIngredients'
+import RecipeTags from './RecipeTags'
 import type { Recipe, Ingredient } from '@/lib/types'
 
 export default async function RecipeDetailPage({ params }: { params: { id: string } }) {
@@ -67,6 +68,13 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
               </div>
             )}
           </div>
+
+          <RecipeTags
+            recipeId={recipe.id}
+            initialCuisines={recipe.cuisines}
+            initialMealTypes={recipe.meal_types}
+            initialCookingMethods={recipe.cooking_methods}
+          />
 
           {ingredients.length > 0 && (
             <RecipeIngredients
