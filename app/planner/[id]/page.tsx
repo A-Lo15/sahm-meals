@@ -49,7 +49,7 @@ export default async function PlanDetailPage({
 
     db
       .from('recipes')
-      .select('id, title, default_servings, source_image_url, state')
+      .select('id, title, default_servings, source_image_url, state, ingredients, cuisines, meal_types, cooking_methods')
       .eq('household_id', householdId)
       .eq('in_library', true)
       .order('title'),

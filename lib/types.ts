@@ -65,6 +65,10 @@ export interface RecipeOption {
   default_servings: number
   source_image_url: string | null
   state: RecipeState
+  ingredients: Ingredient[]
+  cuisines: string[]
+  meal_types: string[]
+  cooking_methods: string[]
 }
 
 export interface Recipe {
@@ -84,4 +88,7 @@ export interface Recipe {
   times_cooked: number
   created_at: string
   updated_at: string
+  cuisines: string[]
+  meal_types: string[]
+  cooking_methods: string[]
 }
