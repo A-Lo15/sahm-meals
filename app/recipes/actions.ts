@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Ingredient, RecipeState } from '@/lib/types'
+import { suggestRecipeTags, type RecipeTags } from '@/lib/recipeTags'
 
 // Auth is enforced via getUser(); admin client is used for DB ops because
 // the user JWT is not forwarded to PostgREST in server action context.
@@ -54,19 +55,28 @@ export async function createRecipe(formData: FormData): Promise<{ id: string }> 
   const isImport = formData.get('is_import') === 'true'
   const originalJsonRaw = formData.get('original_parsed_json') as string | null
 
+  const title = (formData.get('title') as string).trim()
+  const description = (formData.get('description') as string)?.trim() || null
+  const instructions = (formData.get('instructions') as string)?.trim() || null
+
+  const tags = await suggestRecipeTags({ title, description, ingredients, instructions })
+
   const { data: recipe, error } = await db
     .from('recipes')
     .insert({
       household_id: householdId,
-      title: (formData.get('title') as string).trim(),
-      description: (formData.get('description') as string)?.trim() || null,
+      title,
+      description,
       default_servings: servings,
       source_url: (formData.get('source_url') as string)?.trim() || null,
       source_image_url: (formData.get('source_image_url') as string)?.trim() || null,
       ingredients,
-      instructions: (formData.get('instructions') as string)?.trim() || null,
+      instructions,
       original_parsed_json: originalJsonRaw ? JSON.parse(originalJsonRaw) : null,
       state: (isImport ? 'tried' : 'saved') as RecipeState,
+      cuisines: tags.cuisines,
+      meal_types: tags.meal_types,
+      cooking_methods: tags.cooking_methods,
     })
     .select('id')
     .single()
@@ -83,6 +93,20 @@ export async function updateRecipeState(
 ): Promise<void> {
   const { db } = await getContext()
   await db.from('recipes').update({ state: newState }).eq('id', recipeId)
+  revalidatePath('/recipes')
+  revalidatePath(`/recipes/${recipeId}`)
+}
+
+export async function updateRecipeTags(recipeId: string, tags: RecipeTags): Promise<void> {
+  const { db } = await getContext()
+  await db
+    .from('recipes')
+    .update({
+      cuisines: tags.cuisines,
+      meal_types: tags.meal_types,
+      cooking_methods: tags.cooking_methods,
+    })
+    .eq('id', recipeId)
   revalidatePath('/recipes')
   revalidatePath(`/recipes/${recipeId}`)
 }
