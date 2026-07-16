@@ -5,7 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Ingredient, RecipeState } from '@/lib/types'
-import { suggestRecipeTags, type RecipeTags } from '@/lib/recipeTags'
+import type { RecipeTags } from '@/lib/recipeTags'
+import { suggestRecipeTags } from '@/lib/recipeTagsAi'
 
 // Auth is enforced via getUser(); admin client is used for DB ops because
 // the user JWT is not forwarded to PostgREST in server action context.

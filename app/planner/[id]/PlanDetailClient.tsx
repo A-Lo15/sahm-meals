@@ -364,6 +364,9 @@ export default function PlanDetailClient({
   function closePickerSheet() {
     setPickerDate(null)
     setSearch('')
+    setSelectedCuisines([])
+    setSelectedMealTypes([])
+    setSelectedCookingMethods([])
     setImportError(null)
     setImporting(false)
     importingRef.current = false
@@ -373,7 +376,7 @@ export default function PlanDetailClient({
 
   const filteredRecipes = recipes.filter((r) => {
     const matchesTab = pickerTab === 'all' || r.state === 'saved' || r.state === 'favorited'
-    const q = search.toLowerCase()
+    const q = search.trim().toLowerCase()
     const matchesSearch = r.title.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.toLowerCase().includes(q))
     return (
       matchesTab &&

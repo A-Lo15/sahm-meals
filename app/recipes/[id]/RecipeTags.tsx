@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { updateRecipeTags } from '../actions'
 import { CUISINES, MEAL_TYPES, COOKING_METHODS } from '@/lib/recipeTags'
+import TagPill from '../../components/TagPill'
 
 interface Props {
   recipeId: string
@@ -52,16 +53,12 @@ export default function RecipeTags({
         <p className="text-xs text-gray-400 mb-1.5">{label}</p>
         <div className="flex flex-wrap gap-2">
           {options.map((opt) => (
-            <button
+            <TagPill
               key={opt}
-              type="button"
+              label={opt}
+              selected={selected.includes(opt)}
               onClick={() => toggle(dimension, opt)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selected.includes(opt) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              {opt}
-            </button>
+            />
           ))}
         </div>
       </div>

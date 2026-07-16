@@ -1,5 +1,5 @@
 import { createAdminClient } from '../lib/supabase/admin'
-import { suggestRecipeTags } from '../lib/recipeTags'
+import { suggestRecipeTags } from '../lib/recipeTagsAi'
 import type { Ingredient } from '../lib/types'
 
 async function main() {
@@ -14,6 +14,8 @@ async function main() {
     process.exit(1)
   }
 
+  // Note: "untagged" = all three arrays empty. A recipe intentionally cleared to zero tags
+  // would be re-tagged if this script runs again — acceptable for a one-off backfill.
   const untagged = (recipes ?? []).filter(
     (r) => r.cuisines.length === 0 && r.meal_types.length === 0 && r.cooking_methods.length === 0
   )
