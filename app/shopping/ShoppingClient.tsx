@@ -380,6 +380,24 @@ export default function ShoppingClient({
   const allTotal = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !staples.has(normalizeName(i.name))).length ?? 0), 0)
   const allUnchecked = stores.reduce((sum, s) => sum + (assignments?.[s.name]?.filter(i => !i.checked && !staples.has(normalizeName(i.name))).length ?? 0), 0)
 
+  const tabRowRef = useRef<HTMLDivElement>(null)
+  const [tabRowWidth, setTabRowWidth] = useState(0)
+
+  useEffect(() => {
+    const el = tabRowRef.current
+    if (!el) return
+    const observer = new ResizeObserver((entries) => {
+      setTabRowWidth(entries[0].contentRect.width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const avgTabWidth = tabRowWidth / (stores.length + 1)
+  const showFullName = avgTabWidth >= 100
+  const compactTabs = avgTabWidth < 64
+  const tabSizeClasses = compactTabs ? 'px-2 py-2 text-[11px]' : 'px-4 py-3 text-xs'
+
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       {/* Header */}
@@ -468,17 +486,17 @@ export default function ShoppingClient({
         <>
           {/* Store tabs */}
           <div className="sticky top-[73px] z-10 bg-white border-b border-gray-200">
-            <div className="max-w-lg mx-auto flex overflow-x-auto">
+            <div ref={tabRowRef} className="max-w-lg mx-auto flex">
               {/* All tab */}
               <button
                 onClick={() => setActiveTab('all')}
-                className={`flex-shrink-0 px-4 py-3 text-xs font-medium transition-colors border-b-2 ${
+                className={`flex-1 min-w-0 ${tabSizeClasses} font-medium transition-colors border-b-2 ${
                   activeTab === 'all'
                     ? 'border-green-600 text-green-700'
                     : 'border-transparent text-gray-500'
                 }`}
               >
-                <span className="block">All</span>
+                <span className="block truncate">All</span>
                 {allTotal > 0 && (
                   <span className={`text-xs ${allUnchecked === 0 ? 'text-green-500' : 'text-gray-400'}`}>
                     {allUnchecked === 0 ? '✓' : allTotal}
@@ -493,13 +511,13 @@ export default function ShoppingClient({
                   <button
                     key={store.id}
                     onClick={() => setActiveTab(store.name)}
-                    className={`flex-shrink-0 px-4 py-3 text-xs font-medium transition-colors border-b-2 ${
+                    className={`flex-1 min-w-0 ${tabSizeClasses} font-medium transition-colors border-b-2 ${
                       activeTab === store.name
                         ? 'border-green-600 text-green-700'
                         : 'border-transparent text-gray-500'
                     }`}
                   >
-                    <span className="block">{store.abbreviation}</span>
+                    <span className="block truncate">{showFullName ? store.name : store.abbreviation}</span>
                     {total > 0 && (
                       <span className={`text-xs ${remaining === 0 ? 'text-green-500' : 'text-gray-400'}`}>
                         {remaining === 0 ? '✓' : `${remaining}/${total}`}
