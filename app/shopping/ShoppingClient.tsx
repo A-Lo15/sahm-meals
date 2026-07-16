@@ -99,6 +99,10 @@ export default function ShoppingClient({
   const dragRowRef = useRef<HTMLDivElement | null>(null)
   const touchMoved = useRef<boolean>(false)
 
+  // Mouse long-press refs — desktop/trackpad fallback for revealing swipe actions
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTriggered = useRef<boolean>(false)
+
   // Cleanup on unmount — prevents writing to detached DOM nodes after navigation
   useEffect(() => {
     return () => {
@@ -681,8 +685,20 @@ export default function ShoppingClient({
 
                               return (
                                 <div key={item.name} className="relative overflow-hidden">
-                                  {/* Sliding row content */}
+                                  {/* Remove button — sits underneath the sliding content, revealed when it slides left */}
+                                  <button
+                                    onClick={() => removeItem(activeTab, globalIdx)}
+                                    className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
+                                    style={{ width: REMOVE_BTN_WIDTH }}
+                                    aria-label={`Remove ${item.name}`}
+                                    tabIndex={isOpen ? 0 : -1}
+                                  >
+                                    Remove
+                                  </button>
+
+                                  {/* Sliding row content — opaque background covers the Remove button until swiped/long-pressed open */}
                                   <div
+                                    className="bg-white"
                                     style={{
                                       transform: isOpen ? `translateX(-${REMOVE_BTN_WIDTH}px)` : 'translateX(0)',
                                       transition: 'transform 0.2s ease',
@@ -745,10 +761,33 @@ export default function ShoppingClient({
                                     <div className="flex items-center">
                                       <button
                                         onClick={() => {
+                                          if (longPressTriggered.current) {
+                                            longPressTriggered.current = false
+                                            return
+                                          }
                                           if (isOpen) {
                                             setSwipeOpenKey(null)
                                           } else {
                                             toggleItem(activeTab, globalIdx)
+                                          }
+                                        }}
+                                        onMouseDown={() => {
+                                          longPressTriggered.current = false
+                                          longPressTimer.current = setTimeout(() => {
+                                            longPressTriggered.current = true
+                                            setSwipeOpenKey(rowKey)
+                                          }, 500)
+                                        }}
+                                        onMouseUp={() => {
+                                          if (longPressTimer.current) {
+                                            clearTimeout(longPressTimer.current)
+                                            longPressTimer.current = null
+                                          }
+                                        }}
+                                        onMouseLeave={() => {
+                                          if (longPressTimer.current) {
+                                            clearTimeout(longPressTimer.current)
+                                            longPressTimer.current = null
                                           }
                                         }}
                                         className="flex-1 flex items-center gap-3 pl-4 pr-2 py-3.5 active:bg-gray-50 text-left"
@@ -787,17 +826,6 @@ export default function ShoppingClient({
                                       </button>
                                     </div>
                                   </div>
-
-                                  {/* Remove button — revealed when content slides left */}
-                                  <button
-                                    onClick={() => removeItem(activeTab, globalIdx)}
-                                    className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold"
-                                    style={{ width: REMOVE_BTN_WIDTH }}
-                                    aria-label={`Remove ${item.name}`}
-                                    tabIndex={isOpen ? 0 : -1}
-                                  >
-                                    Remove
-                                  </button>
                                 </div>
                               )
                             })}
