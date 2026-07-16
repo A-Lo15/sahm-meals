@@ -18,6 +18,8 @@ import ImportReviewModal from '../ImportReviewModal'
 import CustomMealSheet from '../CustomMealSheet'
 import RecipeScopeSheet from '../RecipeScopeSheet'
 import RecipeEditSheet from '../RecipeEditSheet'
+import RecipeTagFilters from '../../components/RecipeTagFilters'
+import { matchesTagFilter } from '@/lib/recipeTags'
 
 interface Props {
   mealPlanId: string
@@ -73,6 +75,9 @@ export default function PlanDetailClient({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [pickerTab, setPickerTab] = useState<'library' | 'all'>('library')
+  const [selectedCuisines, setSelectedCuisines] = useState<string[]>([])
+  const [selectedMealTypes, setSelectedMealTypes] = useState<string[]>([])
+  const [selectedCookingMethods, setSelectedCookingMethods] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const importingRef = useRef(false)
@@ -368,8 +373,15 @@ export default function PlanDetailClient({
 
   const filteredRecipes = recipes.filter((r) => {
     const matchesTab = pickerTab === 'all' || r.state === 'saved' || r.state === 'favorited'
-    const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase())
-    return matchesTab && matchesSearch
+    const q = search.toLowerCase()
+    const matchesSearch = r.title.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.toLowerCase().includes(q))
+    return (
+      matchesTab &&
+      matchesSearch &&
+      matchesTagFilter(r.cuisines, selectedCuisines) &&
+      matchesTagFilter(r.meal_types, selectedMealTypes) &&
+      matchesTagFilter(r.cooking_methods, selectedCookingMethods)
+    )
   })
 
   return (
@@ -591,6 +603,18 @@ export default function PlanDetailClient({
                   {tab === 'library' ? 'Library' : 'All Recipes'}
                 </button>
               ))}
+            </div>
+
+            <div className="px-4">
+              <RecipeTagFilters
+                selectedCuisines={selectedCuisines}
+                onCuisinesChange={setSelectedCuisines}
+                selectedMealTypes={selectedMealTypes}
+                onMealTypesChange={setSelectedMealTypes}
+                selectedCookingMethods={selectedCookingMethods}
+                onCookingMethodsChange={setSelectedCookingMethods}
+                collapsible
+              />
             </div>
 
             <div className="overflow-y-auto flex-1 px-4 pb-6">
