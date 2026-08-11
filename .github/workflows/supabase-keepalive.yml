@@ -12,9 +12,8 @@ jobs:
       - name: Query Supabase to keep project active
         run: |
           status=$(curl -s -o /dev/null -w "%{http_code}" \
-            "${SUPABASE_URL}/rest/v1/households?select=id&limit=1" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+            "${SUPABASE_URL}/auth/v1/health" \
+            -H "apikey: ${SUPABASE_ANON_KEY}")
           echo "Supabase responded with HTTP $status"
           if [ "$status" -ge 400 ]; then
             echo "Keep-alive ping failed"
