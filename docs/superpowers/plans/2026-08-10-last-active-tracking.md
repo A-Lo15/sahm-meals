@@ -135,6 +135,8 @@ export const config = {
 
 The `supabase` client here already carries the user's session (set up via `getSession()`), so a `.from("users").update(...)` call from it runs as that authenticated user — the existing `"users: own"` RLS policy (`id = auth.uid()`) permits the write with no new grants.
 
+> **Amendment (2026-08-11):** this assumption was wrong. Postgres requires a table-level grant before RLS policies take effect — `authenticated` had none. See `supabase/migrations/009_grant_authenticated_users.sql` and `010_narrow_authenticated_users_grant.sql`.
+
 - [ ] **Step 1: Add the `NextFetchEvent` import and parameter**
 
 Find:

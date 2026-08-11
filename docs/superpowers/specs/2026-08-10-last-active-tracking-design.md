@@ -16,6 +16,8 @@
 3. The update runs via `event.waitUntil(...)` (Next.js middleware's non-blocking task API), so it executes after the response has already been sent — no added latency to the request.
 4. The existing RLS policy (`users: own`, `for all using (id = auth.uid())`) already permits a user to update their own row, so no new grants, functions, or service-role usage are needed.
 
+   **Amendment (2026-08-11):** this assumption was wrong. Postgres requires a table-level grant before RLS policies take effect — `authenticated` had none. See `supabase/migrations/009_grant_authenticated_users.sql` and `010_narrow_authenticated_users_grant.sql`.
+
 ## Throttling
 
 Updates are limited to once per day per user (skip the write if the existing `last_active_at` is less than 1 day old). This keeps DB writes minimal — the column is an approximate "is this user still active" signal for admin visibility, not a precise access log, so day-level freshness is sufficient.
