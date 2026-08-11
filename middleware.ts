@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     return NextResponse.redirect(url);
   }
 
-  if (session) {
+  if (session && request.headers.get("sec-fetch-dest") === "document") {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     event.waitUntil(
       Promise.resolve(
@@ -55,11 +55,11 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       )
         .then(({ error }) => {
           if (error) {
-            console.error("middleware: failed to update last_active_at", error);
+            console.error("middleware: last_active_at update returned error", error);
           }
         })
         .catch((error) => {
-          console.error("middleware: failed to update last_active_at", error);
+          console.error("middleware: last_active_at update threw", error);
         })
     );
   }
