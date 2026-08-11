@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import {
+  NextResponse,
+  type NextFetchEvent,
+  type NextRequest,
+} from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -37,6 +41,27 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  if (session) {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    event.waitUntil(
+      Promise.resolve(
+        supabase
+          .from("users")
+          .update({ last_active_at: new Date().toISOString() })
+          .eq("id", session.user.id)
+          .or(`last_active_at.is.null,last_active_at.lt.${cutoff}`)
+      )
+        .then(({ error }) => {
+          if (error) {
+            console.error("middleware: failed to update last_active_at", error);
+          }
+        })
+        .catch((error) => {
+          console.error("middleware: failed to update last_active_at", error);
+        })
+    );
   }
 
   return supabaseResponse;
